@@ -37,22 +37,53 @@ export async function generateHookPreviewAssets(
   );
 }
 
+const HOOK_CLIP_NAME = /^Hook \d+$/;
+
+export function isHookClipAsset(asset: MediaAsset): boolean {
+  return asset.category === 'intro' && HOOK_CLIP_NAME.test(asset.friendlyName);
+}
+
+/** First saved intro that is not an auto-generated hook segment. */
+export function findDefaultIntroAsset(
+  mediaAssets: MediaAsset[],
+  excludeIds: ReadonlySet<string> = new Set()
+): MediaAsset | null {
+  return (
+    mediaAssets.find(
+      (a) => a.category === 'intro' && !excludeIds.has(a.id) && !isHookClipAsset(a)
+    ) ?? null
+  );
+}
+
 export function buildHookTimelineClips(
-  assets: MediaAsset[],
-  existingClips: TimelineClip[]
+  hookAssets: MediaAsset[],
+  existingClips: TimelineClip[],
+  defaultIntroAsset?: MediaAsset | null
 ): TimelineClip[] {
   const withoutIntros = existingClips.filter((c) => c.track !== 'intro');
   let cursor = 0;
-  const introClips: TimelineClip[] = assets.map((asset) => {
-    const clip: TimelineClip = {
+  const introClips: TimelineClip[] = [];
+
+  for (const asset of hookAssets) {
+    introClips.push({
       id: uuidv4(),
       assetId: asset.id,
       startTime: cursor,
       duration: asset.duration,
       track: 'intro',
-    };
+    });
     cursor += asset.duration;
-    return clip;
-  });
+  }
+
+  if (defaultIntroAsset) {
+    introClips.push({
+      id: uuidv4(),
+      assetId: defaultIntroAsset.id,
+      startTime: cursor,
+      duration: defaultIntroAsset.duration,
+      track: 'intro',
+    });
+  }
+
   return [...introClips, ...withoutIntros];
 }

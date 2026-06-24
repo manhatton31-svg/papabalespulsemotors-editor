@@ -15,6 +15,7 @@ import {
 import { generateDiagramFromVideo } from './lib/diagramGenerate';
 import {
   buildHookTimelineClips,
+  findDefaultIntroAsset,
   generateHookPreviewAssets,
 } from './lib/hookGenerate';
 import {
@@ -181,7 +182,7 @@ export default function App() {
     [applyMainDuration]
   );
 
-  const loadMainVideo = useCallback((result: MainVideoSelection) => {
+  const loadMainVideo = useCallback((result: MainVideoSelection, options?: { silent?: boolean }) => {
     const mainClip: TimelineClip = {
       id: uuidv4(),
       assetId: 'main',
@@ -204,7 +205,11 @@ export default function App() {
     setIsPlaying(false);
     setSelectedClipId(null);
 
-    showStatus('Video loaded — ready to edit');
+    if (!options?.silent) {
+      showStatus('Video loaded — ready to edit');
+    }
+
+    return mainClip;
   }, []);
 
   const importMainVideoFromPath = useCallback(
@@ -223,22 +228,60 @@ export default function App() {
     [loadMainVideo]
   );
 
+  const applyHookPreviewResult = useCallback(
+    (
+      hookAssets: MediaAsset[],
+      baseClips: TimelineClip[],
+      defaultIntroAsset: MediaAsset | null
+    ) => {
+      setTimelineClips((prev) => {
+        const base = baseClips.length > 0 ? baseClips : prev;
+        const next = buildHookTimelineClips(hookAssets, base, defaultIntroAsset);
+        const firstIntro = next.find((c) => c.track === 'intro');
+        if (firstIntro) setSelectedClipId(firstIntro.id);
+        return next;
+      });
+      if (hookAssets.length > 0) {
+        setSelectedAssetIds((prev) => ({ ...prev, intro: hookAssets[0].id }));
+      }
+    },
+    []
+  );
+
   const applyCompletedImportSession = useCallback(
-    (result: Awaited<ReturnType<typeof completeClipImportSession>>) => {
-      setMediaAssets((prev) => mergeMediaAssets(prev, result.addedBroll));
+    async (result: Awaited<ReturnType<typeof completeClipImportSession>>) => {
+      let assetsAfterBroll: MediaAsset[] = [];
+      setMediaAssets((prev) => {
+        assetsAfterBroll = mergeMediaAssets(prev, result.addedBroll);
+        return assetsAfterBroll;
+      });
       if (result.addedBroll.length > 0) {
         setSelectedAssetIds((prev) => ({ ...prev, broll: result.addedBroll[0].id }));
       }
-      loadMainVideo(result.mainVideo);
+
+      const mainClip = loadMainVideo(result.mainVideo, { silent: true });
       setProjectName(result.projectName);
       setLeftPanel('broll');
-      showStatus(
+
+      const importReadyMessage =
         result.clipCount === 1
           ? `Project "${result.projectName}" ready — clip added to B-Roll Library`
-          : `Project "${result.projectName}" ready — ${result.clipCount} clips stitched and added to B-Roll Library`
-      );
+          : `Project "${result.projectName}" ready — ${result.clipCount} clips stitched and added to B-Roll Library`;
+
+      setIsGeneratingHook(true);
+      try {
+        const hookAssets = await generateHookPreviewAssets(result.mainVideo.filePath);
+        const defaultIntro = findDefaultIntroAsset(assetsAfterBroll);
+        setMediaAssets((prev) => mergeMediaAssets(prev, hookAssets));
+        applyHookPreviewResult(hookAssets, [mainClip], defaultIntro);
+        showStatus('Hook preview automatically generated and placed at start');
+      } catch {
+        showStatus(importReadyMessage);
+      } finally {
+        setIsGeneratingHook(false);
+      }
     },
-    [loadMainVideo]
+    [applyHookPreviewResult, loadMainVideo]
   );
 
   const handleImportFromPc = async () => {
@@ -274,7 +317,7 @@ export default function App() {
     setPcImportError(null);
     try {
       const result = await completeClipImportSession(pcImportClips, trimmed);
-      applyCompletedImportSession(result);
+      await applyCompletedImportSession(result);
       setPcImportNamingOpen(false);
       setPcImportClips([]);
     } catch (err) {
@@ -308,7 +351,7 @@ export default function App() {
           })),
           name
         );
-        applyCompletedImportSession(result);
+        await applyCompletedImportSession(result);
       } finally {
         setIsImportingVideo(false);
         setPhoneUploadOpen(false);
@@ -430,15 +473,7 @@ export default function App() {
     try {
       const hookAssets = await generateHookPreviewAssets(mainVideoPath);
       setMediaAssets((prev) => mergeMediaAssets(prev, hookAssets));
-      setTimelineClips((prev) => {
-        const next = buildHookTimelineClips(hookAssets, prev);
-        const firstIntro = next.find((c) => c.track === 'intro');
-        if (firstIntro) setSelectedClipId(firstIntro.id);
-        return next;
-      });
-      if (hookAssets.length > 0) {
-        setSelectedAssetIds((prev) => ({ ...prev, intro: hookAssets[0].id }));
-      }
+      applyHookPreviewResult(hookAssets, [], null);
       setLeftPanel('introsOutros');
       showStatus('Hook preview generated and placed at start');
     } catch (err) {
