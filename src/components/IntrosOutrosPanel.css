@@ -1,0 +1,36 @@
+.intros-outros-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.bookend-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.bookend-tab {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.bookend-tab:hover {
+  color: var(--text-primary);
+}
+
+.bookend-tab.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: rgba(45, 212, 191, 0.35);
+}

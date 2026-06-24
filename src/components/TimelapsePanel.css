@@ -1,0 +1,206 @@
+.timelapse-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.timelapse-header h3 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.timelapse-header p {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.timelapse-mode-on {
+  box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.35);
+}
+
+.timelapse-mode-hint {
+  font-size: 11px;
+  color: var(--accent);
+  padding: 8px 10px;
+  background: var(--accent-dim);
+  border-radius: var(--radius);
+  border: 1px solid rgba(45, 212, 191, 0.25);
+}
+
+.timelapse-bake-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(210, 153, 34, 0.35);
+  background: rgba(210, 153, 34, 0.08);
+}
+
+.timelapse-bake-queue-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #d29922;
+}
+
+.timelapse-bake-queue-item {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.timelapse-bake-queue-clock {
+  color: #e6edf3;
+  font-weight: 700;
+  min-width: 36px;
+  text-align: center;
+}
+
+.timelapse-bake-queue-progress {
+  color: #d29922;
+  font-weight: 700;
+  min-width: 34px;
+  text-align: right;
+}
+
+.timelapse-speed-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.timelapse-speed-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.timelapse-speed-options {
+  display: flex;
+  gap: 4px;
+}
+
+.timelapse-speed-btn {
+  flex: 1;
+  padding: 6px 0;
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+}
+
+.timelapse-speed-btn.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.timelapse-segments-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.timelapse-clear-btn {
+  font-size: 10px;
+  color: var(--text-secondary);
+  background: transparent;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.timelapse-clear-btn:hover:not(:disabled) {
+  color: var(--accent);
+}
+
+.timelapse-segment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-height: 80px;
+}
+
+.timelapse-empty {
+  text-align: center;
+  padding: 16px 8px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.timelapse-empty p {
+  color: var(--text-primary);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.timelapse-segment-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  padding: 8px 10px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  align-items: center;
+}
+
+.timelapse-segment-times {
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.timelapse-segment-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.timelapse-remove-btn {
+  grid-row: span 2;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.timelapse-remove-btn:hover:not(:disabled) {
+  background: var(--bg-primary);
+  color: var(--danger);
+}
+
+.timelapse-apply-btn {
+  margin-top: auto;
+}
+
+.timelapse-apply-hint {
+  font-size: 10px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}

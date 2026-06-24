@@ -1,0 +1,13 @@
+node_modules/
+src-tauri/binaries/
+src-tauri/target/
+dist/
+dist-electron/
+build/
+assets/
+terminals/
+*.log
+.DS_Store
+Thumbs.db
+.env
+.env.*

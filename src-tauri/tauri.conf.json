@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Papa Bales Pulse Motors Editor",
+  "version": "1.0.0",
+  "identifier": "com.papabales.pulse-editor",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "node scripts/sync-ffmpeg-binaries.mjs && npm run dev:vite",
+    "beforeBuildCommand": "node scripts/sync-ffmpeg-binaries.mjs && npm run build:vite"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Papa Bales Pulse Motors Editor",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 1100,
+        "minHeight": 700,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "externalBin": ["binaries/ffmpeg", "binaries/ffprobe"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ]
+  }
+}

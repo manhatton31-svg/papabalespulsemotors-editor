@@ -1,0 +1,39 @@
+{
+  "name": "papa-bales-pulse-editor",
+  "version": "1.0.0",
+  "description": "Papa Bales Pulse Motors Editor - Phase 1 (Tauri)",
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "tauri": "tauri",
+    "dev:vite": "vite",
+    "build": "tauri build",
+    "build:vite": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "build:icon": "node scripts/build-icon.mjs",
+    "fix:icon": "node scripts/fix-icon.mjs",
+    "desktop-icon": "powershell -ExecutionPolicy Bypass -File scripts/create-desktop-shortcut.ps1",
+    "sync-ffmpeg": "node scripts/sync-ffmpeg-binaries.mjs",
+    "postinstall": "node scripts/sync-ffmpeg-binaries.mjs"
+  },
+  "dependencies": {
+    "@ffprobe-installer/ffprobe": "^2.1.2",
+    "@tauri-apps/api": "^2.4.0",
+    "@tauri-apps/plugin-dialog": "^2.2.0",
+    "ffmpeg-static": "^5.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-qr-code": "^2.2.0",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.4.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}

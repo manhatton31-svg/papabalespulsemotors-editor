@@ -1,0 +1,26 @@
+[package]
+name = "papa-bales-pulse-editor"
+version = "1.0.0"
+description = "Papa Bales Pulse Motors Editor"
+authors = ["Papa Bales"]
+edition = "2021"
+
+[lib]
+name = "papa_bales_pulse_editor_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[[bin]]
+name = "papa-bales-pulse-editor"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+axum = { version = "0.7", features = ["multipart"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "fs", "io-util", "sync"] }
+local-ip-address = "0.6"

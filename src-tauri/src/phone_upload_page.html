@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Papa Bales — Send Video</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: #0a0e14;
+      color: #e6edf3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      width: 100%;
+      max-width: 420px;
+      background: #141b24;
+      border: 1px solid #2d3a4d;
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+    }
+    h1 {
+      font-size: 1.15rem;
+      margin: 0 0 8px;
+      color: #d29922;
+    }
+    p { margin: 0 0 16px; font-size: 0.9rem; color: #9fb0c3; line-height: 1.45; }
+    label.btn {
+      display: block;
+      width: 100%;
+      padding: 16px;
+      border-radius: 10px;
+      background: rgba(210, 153, 34, 0.15);
+      border: 1px solid rgba(210, 153, 34, 0.45);
+      color: #f0c14d;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    input[type="file"] { display: none; }
+    .name { font-size: 0.82rem; color: #c9d4e3; margin: 12px 0 0; word-break: break-all; }
+    .progress {
+      height: 8px;
+      background: #1c2633;
+      border-radius: 99px;
+      overflow: hidden;
+      margin: 16px 0 8px;
+      display: none;
+    }
+    .progress.show { display: block; }
+    .bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #b8860b, #d29922);
+      transition: width 0.15s ease;
+    }
+    .status { font-size: 0.85rem; min-height: 1.2em; color: #9fb0c3; }
+    .status.ok { color: #3fb950; }
+    .status.err { color: #f85149; }
+    button.send {
+      width: 100%;
+      margin-top: 12px;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      background: #d29922;
+      color: #0a0e14;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    button.send:disabled { opacity: 0.45; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Send video to editor</h1>
+    <p>Same Wi‑Fi as your PC. Pick a clip from your camera roll — it will open in Papa Bales when the upload finishes.</p>
+    <label class="btn" for="video">Choose video</label>
+    <input id="video" type="file" name="video" accept="video/*,video/mp4,video/quicktime,.mp4,.mov,.m4v,.3gp" />
+    <div class="name" id="fileName"></div>
+    <button class="send" id="sendBtn" type="button" disabled>Upload to editor</button>
+    <div class="progress" id="progressWrap"><div class="bar" id="bar"></div></div>
+    <div class="status" id="status"></div>
+  </div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const token = params.get('t') || '';
+    const videoInput = document.getElementById('video');
+    const fileName = document.getElementById('fileName');
+    const sendBtn = document.getElementById('sendBtn');
+    const statusEl = document.getElementById('status');
+    const progressWrap = document.getElementById('progressWrap');
+    const bar = document.getElementById('bar');
+
+    if (!token) {
+      statusEl.textContent = 'Invalid link — scan the QR code again from the editor.';
+      statusEl.className = 'status err';
+    }
+
+    videoInput.addEventListener('change', () => {
+      const f = videoInput.files && videoInput.files[0];
+      fileName.textContent = f ? f.name : '';
+      sendBtn.disabled = !f || !token;
+    });
+
+    sendBtn.addEventListener('click', () => {
+      const file = videoInput.files && videoInput.files[0];
+      if (!file || !token) return;
+
+      const form = new FormData();
+      form.append('video', file, file.name);
+
+      sendBtn.disabled = true;
+      progressWrap.classList.add('show');
+      bar.style.width = '0%';
+      statusEl.textContent = 'Uploading…';
+      statusEl.className = 'status';
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/upload?t=' + encodeURIComponent(token));
+      xhr.timeout = 0;
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 100);
+          bar.style.width = pct + '%';
+          statusEl.textContent = 'Uploading… ' + pct + '%';
+        }
+      };
+      xhr.onload = () => {
+        try {
+          const data = JSON.parse(xhr.responseText || '{}');
+          if (xhr.status >= 200 && xhr.status < 300 && data.ok) {
+            bar.style.width = '100%';
+            statusEl.textContent = 'Done! Check the editor on your PC.';
+            statusEl.className = 'status ok';
+          } else {
+            throw new Error(data.error || 'Upload failed');
+          }
+        } catch (err) {
+          statusEl.textContent = err.message || 'Upload failed';
+          statusEl.className = 'status err';
+          sendBtn.disabled = false;
+        }
+      };
+      xhr.onerror = () => {
+        statusEl.textContent = 'Network error — stay on the same Wi‑Fi.';
+        statusEl.className = 'status err';
+        sendBtn.disabled = false;
+      };
+      xhr.send(form);
+    });
+  </script>
+</body>
+</html>

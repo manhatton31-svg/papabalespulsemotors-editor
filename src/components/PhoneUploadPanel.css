@@ -1,0 +1,87 @@
+.phone-upload-panel {
+  margin-top: 20px;
+  padding: 16px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(210, 153, 34, 0.35);
+  background: rgba(20, 27, 36, 0.92);
+  max-width: 360px;
+  width: 100%;
+}
+
+.phone-upload-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.phone-upload-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #d29922;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.phone-upload-close {
+  border: none;
+  background: transparent;
+  color: #9fb0c3;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.phone-upload-steps {
+  margin: 0 0 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #9fb0c3;
+  text-align: left;
+}
+
+.phone-upload-qr-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+  background: #fff;
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+
+.phone-upload-url {
+  display: block;
+  font-size: 11px;
+  color: #d29922;
+  word-break: break-all;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.phone-upload-note {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #7d8da3;
+  text-align: left;
+}
+
+.phone-upload-status {
+  margin: 0;
+  font-size: 12px;
+  color: #9fb0c3;
+}
+
+.phone-upload-error {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.phone-upload-error p {
+  margin: 0;
+  font-size: 12px;
+  color: #f85149;
+}

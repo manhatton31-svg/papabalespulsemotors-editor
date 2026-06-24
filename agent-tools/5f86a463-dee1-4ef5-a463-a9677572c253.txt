@@ -1,0 +1,341 @@
+
+> papa-bales-pulse-editor@1.0.0 dev
+> tauri dev
+
+     Running BeforeDevCommand (`npm run dev:vite`)
+
+> papa-bales-pulse-editor@1.0.0 dev:vite
+> vite
+
+Re-optimizing dependencies because lockfile has changed
+
+  VITE v5.4.21  ready in 286 ms
+
+  ➜  Local:   http://localhost:5173/
+     Running DevCommand (`cargo  run --no-default-features --color always --`)
+        Info Watching C:\Users\mphat\papa-bales-pulse-editor\src-tauri for changes...
+    Updating crates.io index
+       Fetch 6 complete; 5 pending                               Fetch 6 complete; 4 pending                               Fetch 6 complete; 3 pending                               Fetch 6 complete; 1 pending                               Fetch 61 complete; 54 pending                             Fetch 61 complete; 50 pending                             Fetch 61 complete; 46 pending                             Fetch 61 complete; 41 pending                             Fetch 61 complete; 35 pending                             Fetch 61 complete; 33 pending                             Fetch 61 complete; 28 pending                             Fetch 61 complete; 24 pending                             Fetch 61 complete; 21 pending                             Fetch 61 complete; 15 pending                             Fetch 61 complete; 13 pending                             Fetch 61 complete; 9 pending                              Fetch 61 complete; 6 pending                              Fetch 61 complete; 5 pending                              Fetch 61 complete; 4 pending                              Fetch 61 complete; 3 pending                              Fetch 61 complete; 1 pending                              Fetch 163 complete; 98 pending                            Fetch 163 complete; 88 pending                            Fetch 163 complete; 77 pending                            Fetch 163 complete; 65 pending                            Fetch 163 complete; 60 pending                            Fetch 163 complete; 50 pending                            Fetch 163 complete; 46 pending                            Fetch 163 complete; 35 pending                            Fetch 163 complete; 24 pending                            Fetch 163 complete; 16 pending                            Fetch 163 complete; 8 pending                             Fetch 163 complete; 5 pending                             Fetch 163 complete; 1 pending                             Fetch 281 complete; 118 pending                           Fetch 281 complete; 27 pending                            Fetch 341 complete; 32 pending                            Fetch 367 complete; 26 pending                            Fetch 383 complete; 2 pending                                                                                       Locking 433 packages to latest compatible versions
+      Adding generic-array v0.14.7 (available: v0.14.9)
+      Adding toml v0.8.2 (available: v0.8.23)
+      Adding toml_datetime v0.6.3 (available: v0.6.11)
+      Adding toml_edit v0.20.2 (available: v0.20.7)
+ Downloading 1 crate                                       Downloading 2 crates                                      Downloading 3 crates                                      Downloading 4 crates                                      Downloading 5 crates                                      Downloading 6 crates                                      Downloading 7 crates                                      Downloading 8 crates                                      Downloading 9 crates                                      Downloading 10 crates                                     Downloading 11 crates                                     Downloading 12 crates                                     Downloading 13 crates                                     Downloading 14 crates                                     Downloading 15 crates                                     Downloading 16 crates                                     Downloading 17 crates                                     Downloading 18 crates                                     Downloading 19 crates                                     Downloading 20 crates                                     Downloading 21 crates                                     Downloading 22 crates                                     Downloading 23 crates                                     Downloading 24 crates                                     Downloading 25 crates                                     Downloading 26 crates                                     Downloading 27 crates                                     Downloading 28 crates                                     Downloading 29 crates                                     Downloading 30 crates                                     Downloading 31 crates                                     Downloading 32 crates                                     Downloading 33 crates                                     Downloading 34 crates                                     Downloading 35 crates                                     Downloading 36 crates                                     Downloading 37 crates                                     Downloading 38 crates                                     Downloading 39 crates                                     Downloading 40 crates                                     Downloading 41 crates                                     Downloading 42 crates                                     Downloading 43 crates                                     Downloading 44 crates                                     Downloading 45 crates                                     Downloading 46 crates                                     Downloading 47 crates                                     Downloading 48 crates                                     Downloading 49 crates                                     Downloading 50 crates                                     Downloading 51 crates                                     Downloading 52 crates                                     Downloading 53 crates                                     Downloading 54 crates                                     Downloading 55 crates                                     Downloading 56 crates                                     Downloading 57 crates                                     Downloading 58 crates                                     Downloading 59 crates                                     Downloading 60 crates                                     Downloading 61 crates                                     Downloading 62 crates                                     Downloading 63 crates                                     Downloading 64 crates                                     Downloading 65 crates                                     Downloading 66 crates                                     Downloading 67 crates                                     Downloading 68 crates                                     Downloading 69 crates                                     Downloading 70 crates                                     Downloading 71 crates                                     Downloading 72 crates                                     Downloading 73 crates                                     Downloading 74 crates                                     Downloading 75 crates                                     Downloading 76 crates                                     Downloading 77 crates                                     Downloading 78 crates                                     Downloading 79 crates                                     Downloading 80 crates                                     Downloading 81 crates                                     Downloading 82 crates                                     Downloading 83 crates                                     Downloading 84 crates                                     Downloading 85 crates                                     Downloading 86 crates                                     Downloading 87 crates                                     Downloading 88 crates                                     Downloading 89 crates                                     Downloading 90 crates                                     Downloading 91 crates                                     Downloading 92 crates                                     Downloading 93 crates                                     Downloading 94 crates                                     Downloading 95 crates                                     Downloading 96 crates                                     Downloading 97 crates                                     Downloading 98 crates                                     Downloading 99 crates                                     Downloading 100 crates                                    Downloading 101 crates                                    Downloading 102 crates                                    Downloading 103 crates                                    Downloading 104 crates                                    Downloading 105 crates                                    Downloading 106 crates                                    Downloading 107 crates                                    Downloading 108 crates                                    Downloading 109 crates                                    Downloading 110 crates                                    Downloading 111 crates                                    Downloading 112 crates                                    Downloading 113 crates                                    Downloading 114 crates                                    Downloading 115 crates                                    Downloading 116 crates                                    Downloading 117 crates                                    Downloading 118 crates                                    Downloading 119 crates                                    Downloading 120 crates                                    Downloading 121 crates                                    Downloading 122 crates                                    Downloading 123 crates                                    Downloading 124 crates                                    Downloading 125 crates                                    Downloading 126 crates                                    Downloading 127 crates                                    Downloading 128 crates                                    Downloading 129 crates                                    Downloading 130 crates                                    Downloading 131 crates                                    Downloading 132 crates                                    Downloading 133 crates                                    Downloading 134 crates                                    Downloading 135 crates                                    Downloading 136 crates                                    Downloading 137 crates                                    Downloading 138 crates                                    Downloading 139 crates                                    Downloading 140 crates                                    Downloading 141 crates                                    Downloading 142 crates                                    Downloading 143 crates                                    Downloading 144 crates                                    Downloading 145 crates                                    Downloading 146 crates                                    Downloading 147 crates                                    Downloading 148 crates                                    Downloading 149 crates                                    Downloading 150 crates                                    Downloading 151 crates                                    Downloading 152 crates                                    Downloading 153 crates                                    Downloading 154 crates                                    Downloading 155 crates                                    Downloading 156 crates                                    Downloading 157 crates                                    Downloading 158 crates                                    Downloading 159 crates                                    Downloading 160 crates                                    Downloading 161 crates                                    Downloading 162 crates                                    Downloading 163 crates                                    Downloading 164 crates                                    Downloading 165 crates                                    Downloading 166 crates                                    Downloading 167 crates                                    Downloading 168 crates                                    Downloading 169 crates                                    Downloading 170 crates                                    Downloading 171 crates                                    Downloading 172 crates                                    Downloading 173 crates                                    Downloading 174 crates                                    Downloading 175 crates                                    Downloading 176 crates                                    Downloading 177 crates                                    Downloading 178 crates                                    Downloading 179 crates                                    Downloading 180 crates                                    Downloading 181 crates                                    Downloading 182 crates                                    Downloading 183 crates                                    Downloading 184 crates                                    Downloading 185 crates                                    Downloading 186 crates                                    Downloading 187 crates                                    Downloading 188 crates                                    Downloading 189 crates                                    Downloading 190 crates                                    Downloading 191 crates                                    Downloading 192 crates                                    Downloading 193 crates                                    Downloading 194 crates                                    Downloading 195 crates                                    Downloading 196 crates                                    Downloading 197 crates                                    Downloading 198 crates                                    Downloading 199 crates                                    Downloading 200 crates                                    Downloading 201 crates                                    Downloading 202 crates                                    Downloading 203 crates                                    Downloading 204 crates                                    Downloading 205 crates                                    Downloading 206 crates                                    Downloading 207 crates                                    Downloading 208 crates                                    Downloading 209 crates                                    Downloading 210 crates                                    Downloading 211 crates                                    Downloading 212 crates                                    Downloading 213 crates                                    Downloading 214 crates                                    Downloading 215 crates                                    Downloading 216 crates                                    Downloading 217 crates                                    Downloading 218 crates                                    Downloading 219 crates                                    Downloading 220 crates                                    Downloading 221 crates                                    Downloading 222 crates                                    Downloading 223 crates                                    Downloading 224 crates                                    Downloading 225 crates                                    Downloading 226 crates                                    Downloading 227 crates                                    Downloading 228 crates                                    Downloading 229 crates                                    Downloading 230 crates                                    Downloading 231 crates                                    Downloading 232 crates                                    Downloading 233 crates                                    Downloading 234 crates                                    Downloading 235 crates                                    Downloading 236 crates                                    Downloading 237 crates                                    Downloading 238 crates                                    Downloading 239 crates                                    Downloading 240 crates                                    Downloading 241 crates                                    Downloading 242 crates                                    Downloading 243 crates                                    Downloading 244 crates                                    Downloading 245 crates                                    Downloading 246 crates                                    Downloading 247 crates                                    Downloading 248 crates                                    Downloading 249 crates                                    Downloading 250 crates                                    Downloading 251 crates                                    Downloading 252 crates                                    Downloading 253 crates                                    Downloading 254 crates                                    Downloading 255 crates                                    Downloading 256 crates                                    Downloading 257 crates                                    Downloading 257 crates, remaining bytes: 566.2KiB                                                                      Downloaded adler2 v2.0.1
+ Downloading 256 crates, remaining bytes: 550.2KiB                                                                      Downloaded alloc-stdlib v0.2.4
+ Downloading 255 crates, remaining bytes: 2.1MiB                                                                        Downloaded cpufeatures v0.2.17
+ Downloading 254 crates, remaining bytes: 2.0MiB                                                                        Downloaded once_cell v1.21.4
+ Downloading 253 crates, remaining bytes: 2.3MiB                                                                        Downloaded heck v0.5.0
+ Downloading 252 crates, remaining bytes: 5.1MiB                                                                        Downloaded serde v1.0.228
+ Downloading 251 crates, remaining bytes: 5.5MiB                                                                        Downloaded typeid v1.0.3
+ Downloading 250 crates, remaining bytes: 5.1MiB                                                                        Downloaded toml_datetime v0.7.5+spec-1.1.0
+ Downloading 249 crates, remaining bytes: 9.5MiB                                                                        Downloaded bs58 v0.5.1
+ Downloading 248 crates, remaining bytes: 9.6MiB                                                                        Downloaded tinyvec_macros v0.1.1
+ Downloading 247 crates, remaining bytes: 9.4MiB                                                                        Downloaded unic-ucd-version v0.9.0
+ Downloading 246 crates, remaining bytes: 9.0MiB                                                                        Downloaded vswhom v0.1.0
+ Downloading 245 crates, remaining bytes: 9.0MiB                                                                        Downloaded utf-8 v0.7.6
+ Downloading 244 crates, remaining bytes: 7.9MiB                                                                        Downloaded uuid v1.23.3
+ Downloading 243 crates, remaining bytes: 7.5MiB                                                                        Downloaded vswhom-sys v0.1.3
+ Downloading 242 crates, remaining bytes: 9.0MiB                                                                        Downloaded webview2-com-macros v0.8.1
+ Downloading 241 crates, remaining bytes: 8.4MiB                                                                        Downloaded windows-result v0.3.4
+ Downloading 240 crates, remaining bytes: 12.6MiB                                                                       Downloaded windows-numerics v0.2.0
+ Downloading 239 crates, remaining bytes: 26.6MiB                                                                       Downloaded toml_datetime v1.1.1+spec-1.1.0
+ Downloading 238 crates, remaining bytes: 25.8MiB                                                                       Downloaded toml_writer v1.1.1+spec-1.1.0
+ Downloading 237 crates, remaining bytes: 25.1MiB                                                                       Downloaded tray-icon v0.24.1
+ Downloading 236 crates, remaining bytes: 24.3MiB                                                                       Downloaded tauri-codegen v2.6.3
+ Downloading 235 crates, remaining bytes: 24.0MiB                                                                       Downloaded socket2 v0.6.4
+ Downloading 234 crates, remaining bytes: 23.6MiB                                                                       Downloaded serde_derive_internals v0.29.1
+ Downloading 233 crates, remaining bytes: 23.3MiB                                                                       Downloaded semver v1.0.28
+ Downloading 232 crates, remaining bytes: 23.1MiB                                                                       Downloaded plist v1.9.0
+ Downloading 231 crates, remaining bytes: 22.7MiB                                                                       Downloaded muda v0.19.3
+ Downloading 230 crates, remaining bytes: 22.4MiB                                                                       Downloaded time-macros v0.2.30
+ Downloading 229 crates, remaining bytes: 22.1MiB                                                                       Downloaded tauri-macros v2.6.3
+ Downloading 228 crates, remaining bytes: 21.8MiB                                                                       Downloaded tauri-build v2.6.3
+ Downloading 227 crates, remaining bytes: 21.5MiB                                                                       Downloaded zerofrom-derive v0.1.7
+ Downloading 226 crates, remaining bytes: 21.0MiB                                                                       Downloaded toml v1.1.2+spec-1.1.0
+ Downloading 225 crates, remaining bytes: 20.2MiB                                                                       Downloaded windows-sys v0.60.2
+ Downloading 224 crates, extracting windows-sys ...        Downloading 224 crates, remaining bytes: 19.4MiB                                                                       Downloaded url v2.5.8
+ Downloading 223 crates, remaining bytes: 18.8MiB                                                                       Downloaded tauri-utils v2.9.3
+ Downloading 222 crates, remaining bytes: 18.1MiB                                                                       Downloaded zerovec v0.11.6
+ Downloading 221 crates, remaining bytes: 17.6MiB                                                                       Downloaded serde_with v3.21.0
+ Downloading 220 crates, remaining bytes: 17.0MiB                                                                       Downloaded quick-xml v0.39.4
+ Downloading 219 crates, remaining bytes: 17.8MiB                                                                       Downloaded time v0.3.51
+ Downloading 218 crates, remaining bytes: 18.0MiB                                                                       Downloaded tauri v2.11.3
+ Downloading 217 crates, remaining bytes: 17.5MiB                                                                       Downloaded writeable v0.6.3
+ Downloading 216 crates, remaining bytes: 18.0MiB                                                                       Downloaded syn v2.0.118
+ Downloading 215 crates, remaining bytes: 17.4MiB                                                                       Downloaded windows-targets v0.53.5
+ Downloading 214 crates, remaining bytes: 17.0MiB                                                                       Downloaded winnow v0.7.15
+ Downloading 213 crates, remaining bytes: 16.6MiB                                                                       Downloaded regex-syntax v0.8.11
+ Downloading 212 crates, remaining bytes: 16.2MiB                                                                       Downloaded tracing v0.1.44
+ Downloading 211 crates, extracting tracing ...                                                                         Downloaded tao v0.35.3
+ Downloading 210 crates, remaining bytes: 15.4MiB                                                                       Downloaded unicode-ident v1.0.24
+ Downloading 209 crates, remaining bytes: 15.0MiB                                                                       Downloaded serde_json v1.0.150
+ Downloading 208 crates, remaining bytes: 14.6MiB                                                                       Downloaded regex-automata v0.4.14
+ Downloading 207 crates, extracting regex-automata ...                                                                  Downloaded zerofrom v0.1.8
+ Downloading 206 crates, remaining bytes: 13.9MiB                                                                       Downloaded windows-targets v0.52.6
+ Downloading 205 crates, remaining bytes: 13.6MiB                                                                       Downloaded windows-strings v0.4.2
+ Downloading 204 crates, remaining bytes: 13.3MiB                                                                       Downloaded windows_x86_64_msvc v0.53.1
+ Downloading 203 crates, extracting windows_x86_64_msvc .…                                                              Downloaded windows-threading v0.1.0
+ Downloading 202 crates, remaining bytes: 13.0MiB                                                                       Downloaded tokio v1.52.3
+ Downloading 201 crates, extracting tokio ...              Downloading 201 crates, remaining bytes: 12.8MiB                                                                       Downloaded yoke v0.8.3
+ Downloading 200 crates, remaining bytes: 12.8MiB                                                                       Downloaded windows-version v0.1.7
+ Downloading 199 crates, remaining bytes: 12.6MiB                                                                       Downloaded zerotrie v0.2.4
+ Downloading 198 crates, remaining bytes: 12.4MiB                                                                       Downloaded winreg v0.55.0
+ Downloading 197 crates, remaining bytes: 12.2MiB                                                                       Downloaded windows-interface v0.59.3
+ Downloading 196 crates, remaining bytes: 12.0MiB                                                                       Downloaded windows_x86_64_msvc v0.52.6
+ Downloading 195 crates, extracting windows_x86_64_msvc .…                                                              Downloaded tauri-plugin-fs v2.5.1
+ Downloading 194 crates, remaining bytes: 11.7MiB                                                                       Downloaded tauri-plugin-dialog v2.7.1
+ Downloading 193 crates, remaining bytes: 11.5MiB                                                                       Downloaded yoke-derive v0.8.2
+ Downloading 192 crates, remaining bytes: 11.4MiB                                                                       Downloaded zmij v1.0.21
+ Downloading 191 crates, remaining bytes: 11.2MiB                                                                       Downloaded zerovec-derive v0.11.3
+ Downloading 190 crates, remaining bytes: 11.1MiB                                                                       Downloaded winnow v1.0.3
+ Downloading 189 crates, remaining bytes: 11.0MiB                                                                       Downloaded wry v0.55.1
+ Downloading 188 crates, remaining bytes: 11.0MiB                                                                       Downloaded regex v1.12.4
+ Downloading 187 crates, remaining bytes: 10.9MiB                                                                       Downloaded unicode-segmentation v1.13.3
+ Downloading 186 crates, remaining bytes: 10.8MiB                                                                       Downloaded png v0.17.16
+ Downloading 185 crates, remaining bytes: 10.7MiB                                                                       Downloaded serde_derive v1.0.228
+ Downloading 184 crates, remaining bytes: 10.6MiB                                                                       Downloaded serde_core v1.0.228
+ Downloading 183 crates, remaining bytes: 10.5MiB                                                                       Downloaded selectors v0.36.1
+ Downloading 182 crates, remaining bytes: 10.4MiB                                                                       Downloaded schemars v1.2.1
+ Downloading 181 crates, remaining bytes: 10.3MiB                                                                       Downloaded schemars v0.9.0
+ Downloading 180 crates, remaining bytes: 10.3MiB          Downloading 180 crates, remaining bytes: 10.2MiB                                                                       Downloaded schemars v0.8.22
+ Downloading 179 crates, remaining bytes: 10.2MiB          Downloading 179 crates, remaining bytes: 10.1MiB                                                                       Downloaded mio v1.2.1
+ Downloading 178 crates, remaining bytes: 10.1MiB                                                                       Downloaded tracing-core v0.1.36
+ Downloading 177 crates, remaining bytes: 10.0MiB                                                                       Downloaded toml v0.9.12+spec-1.1.0
+ Downloading 176 crates, remaining bytes: 9.9MiB                                                                        Downloaded tinyvec v1.11.0
+ Downloading 175 crates, remaining bytes: 9.8MiB                                                                        Downloaded tendril v0.5.0
+ Downloading 174 crates, remaining bytes: 9.7MiB                                                                        Downloaded tauri-runtime-wry v2.11.3
+ Downloading 173 crates, remaining bytes: 9.6MiB                                                                        Downloaded tauri-runtime v2.11.3
+ Downloading 172 crates, remaining bytes: 9.6MiB                                                                        Downloaded softbuffer v0.4.8
+ Downloading 171 crates, remaining bytes: 9.5MiB                                                                        Downloaded smallvec v1.15.2
+ Downloading 170 crates, remaining bytes: 9.4MiB                                                                        Downloaded sha2 v0.10.9
+ Downloading 169 crates, remaining bytes: 9.3MiB                                                                        Downloaded serde_with_macros v3.21.0
+ Downloading 168 crates, remaining bytes: 9.2MiB                                                                        Downloaded serde-untagged v0.1.9
+ Downloading 167 crates, remaining bytes: 9.1MiB                                                                        Downloaded rfd v0.16.0
+ Downloading 166 crates, remaining bytes: 9.1MiB                                                                        Downloaded proc-macro2 v1.0.106
+ Downloading 165 crates, remaining bytes: 9.0MiB                                                                        Downloaded parking_lot_core v0.9.12
+ Downloading 164 crates, remaining bytes: 8.9MiB                                                                        Downloaded parking_lot v0.12.5
+ Downloading 163 crates, remaining bytes: 8.8MiB                                                                        Downloaded thiserror-impl v2.0.18
+ Downloading 162 crates, remaining bytes: 8.7MiB                                                                        Downloaded thiserror-impl v1.0.69
+ Downloading 161 crates, remaining bytes: 8.6MiB                                                                        Downloaded thiserror v2.0.18
+ Downloading 160 crates, remaining bytes: 8.5MiB                                                                        Downloaded window-vibrancy v0.6.0
+ Downloading 159 crates, extracting window-vibrancy ...                                                                 Downloaded thiserror v1.0.69
+ Downloading 158 crates, remaining bytes: 8.4MiB                                                                        Downloaded tauri-winres v0.3.6
+ Downloading 157 crates, remaining bytes: 8.3MiB                                                                        Downloaded string_cache v0.9.0
+ Downloading 156 crates, remaining bytes: 8.2MiB                                                                        Downloaded shlex v2.0.1
+ Downloading 155 crates, remaining bytes: 8.2MiB                                                                        Downloaded powerfmt v0.2.0
+ Downloading 154 crates, remaining bytes: 8.1MiB                                                                        Downloaded phf_generator v0.13.1
+ Downloading 153 crates, remaining bytes: 8.1MiB                                                                        Downloaded windows-link v0.2.1
+ Downloading 152 crates, remaining bytes: 8.0MiB                                                                        Downloaded windows-link v0.1.3
+ Downloading 151 crates, remaining bytes: 7.9MiB                                                                        Downloaded windows-sys v0.59.0
+ Downloading 150 crates, extracting windows-sys ...        Downloading 150 crates, remaining bytes: 7.9MiB                                                                        Downloaded windows-implement v0.60.2
+ Downloading 149 crates, remaining bytes: 7.8MiB                                                                        Downloaded windows-future v0.2.1
+ Downloading 148 crates, remaining bytes: 7.7MiB                                                                        Downloaded windows-core v0.61.2
+ Downloading 147 crates, remaining bytes: 7.7MiB                                                                        Downloaded windows-collections v0.2.0
+ Downloading 146 crates, remaining bytes: 7.6MiB                                                                        Downloaded winapi-util v0.1.11
+ Downloading 145 crates, remaining bytes: 7.6MiB                                                                        Downloaded tauri-plugin v2.6.3
+ Downloading 144 crates, remaining bytes: 7.6MiB                                                                        Downloaded synstructure v0.13.2
+ Downloading 143 crates, remaining bytes: 7.5MiB                                                                        Downloaded libc v0.2.186
+ Downloading 142 crates, extracting libc ...               Downloading 142 crates, remaining bytes: 7.4MiB                                                                        Downloaded webview2-com v0.38.2
+ Downloading 141 crates, remaining bytes: 7.4MiB                                                                        Downloaded brotli v8.0.4
+ Downloading 140 crates, extracting brotli ...                                                                          Downloaded web_atoms v0.2.5
+ Downloading 139 crates, remaining bytes: 7.3MiB                                                                        Downloaded walkdir v2.5.0
+ Downloading 138 crates, remaining bytes: 7.3MiB                                                                        Downloaded serde_repr v0.1.20
+ Downloading 137 crates, remaining bytes: 7.2MiB                                                                        Downloaded phf v0.13.1
+ Downloading 136 crates, remaining bytes: 7.2MiB                                                                        Downloaded chrono v0.4.45
+ Downloading 135 crates, remaining bytes: 7.1MiB                                                                        Downloaded typenum v1.20.1
+ Downloading 134 crates, remaining bytes: 7.1MiB                                                                        Downloaded strsim v0.11.1
+ Downloading 133 crates, remaining bytes: 7.0MiB                                                                        Downloaded quote v1.0.46
+ Downloading 132 crates, remaining bytes: 7.0MiB                                                                        Downloaded pin-project-lite v0.2.17
+ Downloading 131 crates, remaining bytes: 6.9MiB                                                                        Downloaded memchr v2.8.2
+ Downloading 130 crates, remaining bytes: 6.9MiB                                                                        Downloaded idna v1.1.0
+ Downloading 129 crates, remaining bytes: 6.8MiB                                                                        Downloaded icu_properties_data v2.2.0
+ Downloading 128 crates, remaining bytes: 6.8MiB           Downloading 128 crates, remaining bytes: 6.7MiB                                                                        Downloaded icu_normalizer v2.2.0
+ Downloading 127 crates, remaining bytes: 6.7MiB                                                                        Downloaded http v1.4.2
+ Downloading 126 crates, remaining bytes: 6.7MiB                                                                        Downloaded hashbrown v0.17.1
+ Downloading 125 crates, remaining bytes: 6.6MiB                                                                        Downloaded hashbrown v0.12.3
+ Downloading 124 crates, remaining bytes: 6.6MiB                                                                        Downloaded dom_query v0.27.0
+ Downloading 123 crates, remaining bytes: 6.5MiB                                                                        Downloaded derive_more-impl v2.1.1
+ Downloading 122 crates, remaining bytes: 6.5MiB                                                                        Downloaded brotli-decompressor v5.0.3
+ Downloading 121 crates, remaining bytes: 6.4MiB                                                                        Downloaded aho-corasick v1.1.4
+ Downloading 120 crates, remaining bytes: 6.4MiB                                                                        Downloaded urlpattern v0.3.0
+ Downloading 119 crates, remaining bytes: 6.3MiB                                                                        Downloaded tinystr v0.8.3
+ Downloading 118 crates, remaining bytes: 6.3MiB                                                                        Downloaded simd-adler32 v0.3.9
+ Downloading 117 crates, remaining bytes: 6.2MiB                                                                        Downloaded servo_arc v0.4.3
+ Downloading 116 crates, remaining bytes: 6.2MiB                                                                        Downloaded same-file v1.0.6
+ Downloading 115 crates, remaining bytes: 6.1MiB                                                                        Downloaded indexmap v2.14.0
+ Downloading 114 crates, remaining bytes: 6.1MiB                                                                        Downloaded ico v0.5.0
+ Downloading 113 crates, remaining bytes: 6.0MiB                                                                        Downloaded flate2 v1.1.9
+ Downloading 112 crates, remaining bytes: 6.0MiB                                                                        Downloaded derive_more v2.1.1
+ Downloading 111 crates, remaining bytes: 5.9MiB                                                                        Downloaded cc v1.2.65
+ Downloading 110 crates, remaining bytes: 5.9MiB                                                                        Downloaded time-core v0.1.9
+ Downloading 109 crates, remaining bytes: 5.8MiB                                                                        Downloaded string_cache_codegen v0.6.1
+ Downloading 108 crates, remaining bytes: 5.8MiB                                                                        Downloaded stable_deref_trait v1.2.1
+ Downloading 107 crates, remaining bytes: 5.7MiB                                                                        Downloaded serialize-to-javascript v0.1.2
+ Downloading 106 crates, remaining bytes: 5.7MiB                                                                        Downloaded scopeguard v1.2.0
+ Downloading 105 crates, remaining bytes: 5.6MiB                                                                        Downloaded rustc_version v0.4.1
+ Downloading 104 crates, remaining bytes: 5.6MiB                                                                        Downloaded ref-cast-impl v1.0.25
+ Downloading 103 crates, remaining bytes: 5.6MiB                                                                        Downloaded precomputed-hash v0.1.1
+ Downloading 102 crates, remaining bytes: 5.5MiB                                                                        Downloaded percent-encoding v2.3.2
+ Downloading 101 crates, remaining bytes: 5.5MiB                                                                        Downloaded num-traits v0.2.19
+ Downloading 100 crates, remaining bytes: 5.4MiB                                                                        Downloaded miniz_oxide v0.8.9
+ Downloading 99 crates, remaining bytes: 5.4MiB                                                                         Downloaded jsonptr v0.6.3
+ Downloading 98 crates, remaining bytes: 5.3MiB                                                                         Downloaded indexmap v1.9.3
+ Downloading 97 crates, remaining bytes: 5.3MiB                                                                         Downloaded icu_normalizer_data v2.2.0
+ Downloading 96 crates, remaining bytes: 5.2MiB                                                                         Downloaded icu_locale_core v2.2.0
+ Downloading 95 crates, remaining bytes: 5.2MiB                                                                         Downloaded icu_collections v2.2.0
+ Downloading 94 crates, remaining bytes: 5.1MiB                                                                         Downloaded html5ever v0.38.0
+ Downloading 93 crates, remaining bytes: 5.1MiB                                                                         Downloaded getrandom v0.3.4
+ Downloading 92 crates, remaining bytes: 5.0MiB                                                                         Downloaded darling_core v0.23.0
+ Downloading 91 crates, remaining bytes: 5.0MiB                                                                         Downloaded crossbeam-channel v0.5.15
+ Downloading 90 crates, remaining bytes: 4.9MiB                                                                         Downloaded bytes v1.12.0
+ Downloading 89 crates, remaining bytes: 4.9MiB                                                                         Downloaded base64 v0.22.1
+ Downloading 88 crates, remaining bytes: 4.8MiB                                                                         Downloaded version_check v0.9.5
+ Downloading 87 crates, remaining bytes: 4.8MiB                                                                         Downloaded utf8_iter v1.0.4
+ Downloading 86 crates, remaining bytes: 4.7MiB                                                                         Downloaded unic-ucd-ident v0.9.0
+ Downloading 85 crates, remaining bytes: 4.7MiB                                                                         Downloaded toml_parser v1.1.2+spec-1.1.0
+ Downloading 84 crates, remaining bytes: 4.6MiB                                                                         Downloaded schemars_derive v0.8.22
+ Downloading 83 crates, remaining bytes: 4.6MiB                                                                         Downloaded ref-cast v1.0.25
+ Downloading 82 crates, remaining bytes: 4.5MiB                                                                         Downloaded phf_codegen v0.13.1
+ Downloading 81 crates, remaining bytes: 4.5MiB                                                                         Downloaded option-ext v0.2.0
+ Downloading 80 crates, remaining bytes: 4.4MiB                                                                         Downloaded log v0.4.33
+ Downloading 79 crates, remaining bytes: 4.4MiB                                                                         Downloaded keyboard-types v0.7.0
+ Downloading 78 crates, remaining bytes: 4.3MiB                                                                         Downloaded icu_provider v2.2.0
+ Downloading 77 crates, remaining bytes: 4.3MiB                                                                         Downloaded icu_properties v2.2.0
+ Downloading 76 crates, remaining bytes: 4.2MiB                                                                         Downloaded getrandom v0.4.3
+ Downloading 75 crates, remaining bytes: 4.2MiB                                                                         Downloaded find-msvc-tools v0.1.9
+ Downloading 74 crates, remaining bytes: 4.1MiB                                                                         Downloaded deranged v0.5.8
+ Downloading 73 crates, remaining bytes: 4.1MiB                                                                         Downloaded windows-sys v0.61.2
+ Downloading 72 crates, extracting windows-sys ...         Downloading 72 crates, remaining bytes: 4.0MiB                                                                         Downloaded cssparser v0.36.0
+ Downloading 71 crates, remaining bytes: 4.0MiB                                                                         Downloaded crc32fast v1.5.0
+ Downloading 70 crates, remaining bytes: 4.0MiB                                                                         Downloaded cfb v0.7.3
+ Downloading 69 crates, remaining bytes: 3.9MiB                                                                         Downloaded camino v1.2.3
+ Downloading 68 crates, remaining bytes: 3.9MiB                                                                         Downloaded bitflags v2.13.0
+ Downloading 67 crates, remaining bytes: 3.9MiB                                                                         Downloaded unic-common v0.9.0
+ Downloading 66 crates, remaining bytes: 3.8MiB                                                                         Downloaded unic-char-range v0.9.0
+ Downloading 65 crates, remaining bytes: 3.8MiB                                                                         Downloaded unic-char-property v0.9.0
+ Downloading 64 crates, remaining bytes: 3.8MiB                                                                         Downloaded serialize-to-javascript-impl v0.1.2
+ Downloading 63 crates, remaining bytes: 3.7MiB                                                                         Downloaded lock_api v0.4.14
+ Downloading 62 crates, remaining bytes: 3.7MiB                                                                         Downloaded litemap v0.8.2
+ Downloading 61 crates, remaining bytes: 3.7MiB                                                                         Downloaded json-patch v3.0.1
+ Downloading 60 crates, remaining bytes: 3.6MiB                                                                         Downloaded fastrand v2.4.1
+ Downloading 59 crates, remaining bytes: 3.6MiB                                                                         Downloaded embed-resource v3.0.9
+ Downloading 58 crates, remaining bytes: 3.6MiB                                                                         Downloaded dtoa v1.0.11
+ Downloading 57 crates, remaining bytes: 3.5MiB                                                                         Downloaded darling v0.23.0
+ Downloading 56 crates, remaining bytes: 3.5MiB                                                                         Downloaded infer v0.19.0
+ Downloading 55 crates, remaining bytes: 3.5MiB                                                                         Downloaded glob v0.3.3
+ Downloading 54 crates, remaining bytes: 3.4MiB                                                                         Downloaded fdeflate v0.3.7
+ Downloading 53 crates, remaining bytes: 3.4MiB                                                                         Downloaded erased-serde v0.4.10
+ Downloading 52 crates, remaining bytes: 3.4MiB                                                                         Downloaded dtoa-short v0.3.5
+ Downloading 51 crates, remaining bytes: 3.4MiB                                                                         Downloaded siphasher v1.0.3
+ Downloading 50 crates, remaining bytes: 3.3MiB                                                                         Downloaded serde_spanned v1.1.1
+ Downloading 49 crates, remaining bytes: 3.3MiB                                                                         Downloaded rustc-hash v2.1.2
+ Downloading 48 crates, remaining bytes: 3.3MiB                                                                         Downloaded raw-window-handle v0.6.2
+ Downloading 47 crates, remaining bytes: 3.2MiB                                                                         Downloaded potential_utf v0.1.5
+ Downloading 46 crates, remaining bytes: 3.2MiB                                                                         Downloaded phf_macros v0.13.1
+ Downloading 45 crates, remaining bytes: 3.2MiB                                                                         Downloaded equivalent v1.0.2
+ Downloading 44 crates, remaining bytes: 3.1MiB                                                                         Downloaded dyn-clone v1.0.20
+ Downloading 43 crates, remaining bytes: 3.1MiB                                                                         Downloaded dunce v1.0.5
+ Downloading 42 crates, remaining bytes: 3.1MiB                                                                         Downloaded dtor-proc-macro v0.0.6
+ Downloading 41 crates, remaining bytes: 3.0MiB                                                                         Downloaded displaydoc v0.2.6
+ Downloading 40 crates, remaining bytes: 3.0MiB                                                                         Downloaded digest v0.10.7
+ Downloading 39 crates, remaining bytes: 3.0MiB                                                                         Downloaded ctor-proc-macro v0.0.7
+ Downloading 38 crates, remaining bytes: 2.9MiB                                                                         Downloaded cssparser-macros v0.6.1
+ Downloading 37 crates, remaining bytes: 2.9MiB                                                                         Downloaded crossbeam-utils v0.8.21
+ Downloading 36 crates, remaining bytes: 2.9MiB                                                                         Downloaded cookie v0.18.1
+ Downloading 35 crates, remaining bytes: 2.8MiB                                                                         Downloaded cargo_toml v0.22.3
+ Downloading 34 crates, remaining bytes: 2.8MiB                                                                         Downloaded byteorder v1.5.0
+ Downloading 33 crates, remaining bytes: 2.8MiB                                                                         Downloaded phf_shared v0.13.1
+ Downloading 32 crates, remaining bytes: 2.7MiB                                                                         Downloaded mime v0.3.17
+ Downloading 31 crates, remaining bytes: 2.7MiB                                                                         Downloaded markup5ever v0.38.0
+ Downloading 30 crates, remaining bytes: 2.7MiB                                                                         Downloaded itoa v1.0.18
+ Downloading 29 crates, remaining bytes: 2.6MiB                                                                         Downloaded idna_adapter v1.2.2
+ Downloading 28 crates, remaining bytes: 2.6MiB                                                                         Downloaded http-range v0.1.5
+ Downloading 27 crates, remaining bytes: 2.6MiB                                                                         Downloaded hex v0.4.3
+ Downloading 26 crates, remaining bytes: 2.5MiB                                                                         Downloaded generic-array v0.14.7
+ Downloading 25 crates, remaining bytes: 2.5MiB                                                                         Downloaded foldhash v0.2.0
+ Downloading 24 crates, remaining bytes: 2.5MiB                                                                         Downloaded fnv v1.0.7
+ Downloading 23 crates, remaining bytes: 2.4MiB                                                                         Downloaded dpi v0.1.2
+ Downloading 22 crates, remaining bytes: 2.4MiB                                                                         Downloaded dirs-sys v0.5.0
+ Downloading 21 crates, remaining bytes: 2.4MiB                                                                         Downloaded dirs v6.0.0
+ Downloading 20 crates, remaining bytes: 2.3MiB                                                                         Downloaded darling_macro v0.23.0
+ Downloading 19 crates, remaining bytes: 2.3MiB                                                                         Downloaded anyhow v1.0.102
+ Downloading 18 crates, remaining bytes: 2.3MiB                                                                         Downloaded ident_case v1.0.1
+ Downloading 17 crates, remaining bytes: 2.2MiB                                                                         Downloaded form_urlencoded v1.2.2
+ Downloading 16 crates, remaining bytes: 2.2MiB                                                                         Downloaded dtor v0.3.0
+ Downloading 15 crates, remaining bytes: 2.2MiB                                                                         Downloaded cargo_metadata v0.19.2
+ Downloading 14 crates, remaining bytes: 2.2MiB                                                                         Downloaded bit-vec v0.8.0
+ Downloading 13 crates, remaining bytes: 2.1MiB                                                                         Downloaded ctor v0.8.0
+ Downloading 12 crates, remaining bytes: 2.1MiB                                                                         Downloaded cargo-platform v0.1.9
+ Downloading 11 crates, remaining bytes: 2.0MiB                                                                         Downloaded bitflags v1.3.2
+ Downloading 10 crates, remaining bytes: 2.0MiB                                                                         Downloaded bit-set v0.8.0
+ Downloading 9 crates, remaining bytes: 2.0MiB                                                                          Downloaded autocfg v1.5.1
+ Downloading 8 crates, remaining bytes: 2.0MiB                                                                          Downloaded num-conv v0.2.2
+ Downloading 7 crates, remaining bytes: 1.9MiB                                                                          Downloaded new_debug_unreachable v1.0.6
+ Downloading 6 crates, remaining bytes: 1.9MiB                                                                          Downloaded crypto-common v0.1.7
+ Downloading 5 crates, remaining bytes: 1.9MiB                                                                          Downloaded cfg-if v1.0.4
+ Downloading 4 crates, remaining bytes: 1.8MiB                                                                          Downloaded block-buffer v0.10.4
+ Downloading 3 crates, remaining bytes: 1.8MiB                                                                          Downloaded alloc-no-stdlib v2.0.4
+ Downloading 2 crates, remaining bytes: 1.8MiB                                                                          Downloaded webview2-com-sys v0.38.2
+ Downloading 1 crate, extracting webview2-com-sys ...                                                                   Downloaded windows v0.61.3
+ Downloading 0 crates, extracting windows ...                                                                           Downloaded 257 crates (39.2MiB) in 10.45s (largest was `windows` at 8.9MiB)
+warning: output filename collision at C:\Users\mphat\papa-bales-pulse-editor\src-tauri\target\debug\deps\libpapa_bales_pulse_editor_lib.rlib
+  |
+  = note: the lib target `papa_bales_pulse_editor_lib` in package `papa-bales-pulse-editor v1.0.0 (C:\Users\mphat\papa-bales-pulse-editor\src-tauri)` has the same output filename as the lib target `papa_bales_pulse_editor_lib` in package `papa-bales-pulse-editor v1.0.0 (C:\Users\mphat\papa-bales-pulse-editor\src-tauri)`
+  = note: this may become a hard error in the future; see <https://github.com/rust-lang/cargo/issues/6313>
+  = help: consider changing their names to be unique or compiling them separately
+warning: output filename collision at C:\Users\mphat\papa-bales-pulse-editor\src-tauri\target\debug\libpapa_bales_pulse_editor_lib.rlib
+  |
+  = note: the lib target `papa_bales_pulse_editor_lib` in package `papa-bales-pulse-editor v1.0.0 (C:\Users\mphat\papa-bales-pulse-editor\src-tauri)` has the same output filename as the lib target `papa_bales_pulse_editor_lib` in package `papa-bales-pulse-editor v1.0.0 (C:\Users\mphat\papa-bales-pulse-editor\src-tauri)`
+  = note: this may become a hard error in the future; see <https://github.com/rust-lang/cargo/issues/6313>
+  = help: consider changing their names to be unique or compiling them separately
+   Compiling proc-macro2 v1.0.106
+   Compiling quote v1.0.46
+   Compiling unicode-ident v1.0.24
+   Compiling serde_core v1.0.228
+   Compiling windows-link v0.2.1
+   Compiling smallvec v1.15.2
+   Compiling cfg-if v1.0.4
+   Compiling siphasher v1.0.3
+   Compiling litemap v0.8.2
+   Compiling writeable v0.6.3
+   Compiling memchr v2.8.2
+   Compiling utf8_iter v1.0.4
+   Compiling fastrand v2.4.1
+   Compiling stable_deref_trait v1.2.1
+   Compiling itoa v1.0.18
+   Compiling icu_normalizer_data v2.2.0
+   Compiling icu_properties_data v2.2.0
+   Compiling zmij v1.0.21
+   Compiling thiserror v2.0.18
+    Building [                           ] 0/371: thiserr…                                                               Compiling serde v1.0.228
+    Building [                           ] 1/371: thiserr…                                                               Compiling winnow v1.0.3
+    Building [                           ] 2/371: thiserr…                                                               Compiling num-conv v0.2.2
+    Building [                           ] 3/371: thiserr…                                                               Compiling phf_shared v0.13.1
+    Building [                           ] 4/371: thiserr…                                                               Compiling parking_lot_core v0.9.12
+    Building [                           ] 5/371: thiserr…                                                               Compiling time-core v0.1.9
+    Building [                           ] 6/371: thiserr…                                                            error: linker `link.exe` not found
+  |
+  = note: program not found
+
+note: the msvc targets depend on the msvc linker but `link.exe` was not found
+
+   Compiling scopeguard v1.2.0
+   Compiling ident_case v1.0.1
+    Building [                           ] 8/371: thiserr…                                                            note: please ensure that Visual Studio 2017 or later, or Build Tools for Visual Studio were installed with the Visual C++ option
+
+note: VS Code is a different product, and is not sufficient
+
+    Building [                           ] 8/371: thiserr…                                                               Compiling log v0.4.33
+    Building [                           ] 9/371: thiserr…                                                               Compiling powerfmt v0.2.0
+    Building [                          ] 10/371: thiserr…                                                            error: could not compile `icu_normalizer_data` (build script) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+    Building [                          ] 11/371: thiserr…                                                            error: could not compile `icu_properties_data` (build script) due to 1 previous error
+    Building [                          ] 12/371: thiserr…    Building [                          ] 13/371: thiserr…                                                            error: could not compile `parking_lot_core` (build script) due to 1 previous error
+    Building [                          ] 14/371: thiserr…    Building [>                         ] 15/371: thiserr…                                                            error: could not compile `zmij` (build script) due to 1 previous error
+    Building [>                         ] 16/371: thiserr…                                                            error: could not compile `quote` (build script) due to 1 previous error
+    Building [>                         ] 17/371: thiserr…                                                            error: could not compile `serde_core` (build script) due to 1 previous error
+    Building [>                         ] 18/371: thiserr…                                                            error: could not compile `serde` (build script) due to 1 previous error
+    Building [>                         ] 19/371: thiserr…    Building [>                         ] 20/371: thiserr…                                                            error: could not compile `serde_core` (build script) due to 1 previous error
+    Building [>                         ] 21/371: thiserr…                                                            error: could not compile `proc-macro2` (build script) due to 1 previous error
+    Building [>                         ] 22/371: thiserr…    Building [>                         ] 23/371: thiserr…                                                            error: could not compile `thiserror` (build script) due to 1 previous error
+    Building [>                         ] 24/371: powerfm…    Building [>                         ] 25/371: powerfm…    Building [>                         ] 26/371: powerfm…    Building [>                         ] 27/371: powerfm…    Building [>                         ] 28/371: winnow,…    Building [=>                        ] 29/371: memchr                                                              
