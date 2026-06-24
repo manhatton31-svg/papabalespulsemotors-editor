@@ -22,6 +22,7 @@ interface LeftSidebarProps {
   timelapseSegments: TimelapseSegment[];
   timelapsePendingStart: number | null;
   isGeneratingDiagram: boolean;
+  isGeneratingHook: boolean;
   onSelectAsset: (category: LibraryCategory, id: string) => void;
   onRenameAsset: (category: LibraryCategory, id: string, name: string) => void;
   playheadReady: boolean;
@@ -33,6 +34,7 @@ interface LeftSidebarProps {
   onRemoveTimelapseSegment: (id: string) => void;
   onClearTimelapse: () => void;
   onGenerateDiagram: () => void;
+  onGenerateHookPreview: () => void;
   onInsertDiagram: () => void;
 }
 
@@ -47,6 +49,7 @@ export function LeftSidebar({
   timelapseSegments,
   timelapsePendingStart,
   isGeneratingDiagram,
+  isGeneratingHook,
   onSelectAsset,
   onRenameAsset,
   playheadReady,
@@ -58,9 +61,12 @@ export function LeftSidebar({
   onRemoveTimelapseSegment,
   onClearTimelapse,
   onGenerateDiagram,
+  onGenerateHookPreview,
   onInsertDiagram,
 }: LeftSidebarProps) {
   const brollAssets = mediaAssets.filter((a) => a.category === 'broll');
+  const introAssets = mediaAssets.filter((a) => a.category === 'intro');
+  const outroAssets = mediaAssets.filter((a) => a.category === 'outro');
   const diagramAssets = mediaAssets.filter((a) => a.category === 'diagram');
 
   return (
@@ -94,15 +100,18 @@ export function LeftSidebar({
         )}
         {activePanel === 'introsOutros' && (
           <IntrosOutrosPanel
-            mediaAssets={mediaAssets}
+            hasVideo={hasVideo}
+            introAssets={introAssets}
+            outroAssets={outroAssets}
             selectedAssetIds={{
               intro: selectedAssetIds.intro,
               outro: selectedAssetIds.outro,
             }}
+            isGeneratingHook={isGeneratingHook}
             onSelectAsset={onSelectAsset}
             onRenameAsset={onRenameAsset}
             onImportContent={onImportContent}
-            onAddAtPlayhead={onAddAtPlayhead}
+            onGenerateHookPreview={onGenerateHookPreview}
           />
         )}
         {activePanel === 'timelapse' && (

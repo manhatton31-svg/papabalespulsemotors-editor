@@ -14,6 +14,10 @@ import {
 } from './lib/contentLibrary';
 import { generateDiagramFromVideo } from './lib/diagramGenerate';
 import {
+  buildHookTimelineClips,
+  generateHookPreviewAssets,
+} from './lib/hookGenerate';
+import {
   buildProject,
   emptySelectedAssetIds,
   hydrateProject,
@@ -63,6 +67,7 @@ export default function App() {
   const [exportStatusMessage, setExportStatusMessage] = useState<string | null>(null);
   const [exportOutputPath, setExportOutputPath] = useState<string | null>(null);
   const [isGeneratingDiagram, setIsGeneratingDiagram] = useState(false);
+  const [isGeneratingHook, setIsGeneratingHook] = useState(false);
   const [selectedAssetIds, setSelectedAssetIds] = useState(emptySelectedAssetIds());
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [playhead, setPlayhead] = useState(0);
@@ -413,6 +418,33 @@ export default function App() {
       showStatus(`Diagram failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIsGeneratingDiagram(false);
+    }
+  };
+
+  const handleGenerateHookPreview = async () => {
+    if (!mainVideoPath) {
+      showStatus('Upload a main video first');
+      return;
+    }
+    setIsGeneratingHook(true);
+    try {
+      const hookAssets = await generateHookPreviewAssets(mainVideoPath);
+      setMediaAssets((prev) => mergeMediaAssets(prev, hookAssets));
+      setTimelineClips((prev) => {
+        const next = buildHookTimelineClips(hookAssets, prev);
+        const firstIntro = next.find((c) => c.track === 'intro');
+        if (firstIntro) setSelectedClipId(firstIntro.id);
+        return next;
+      });
+      if (hookAssets.length > 0) {
+        setSelectedAssetIds((prev) => ({ ...prev, intro: hookAssets[0].id }));
+      }
+      setLeftPanel('introsOutros');
+      showStatus('Hook preview generated and placed at start');
+    } catch (err) {
+      showStatus(`Hook preview failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsGeneratingHook(false);
     }
   };
 
@@ -821,6 +853,7 @@ export default function App() {
           timelapseSegments={timelapseSegments}
           timelapsePendingStart={timelapsePendingStart}
           isGeneratingDiagram={isGeneratingDiagram}
+          isGeneratingHook={isGeneratingHook}
           onSelectAsset={handleSelectAsset}
           onRenameAsset={handleRenameAsset}
           playheadReady={playheadEngaged && !!mainVideoUrl}
@@ -837,6 +870,7 @@ export default function App() {
             setTimelapsePendingStart(null);
           }}
           onGenerateDiagram={handleGenerateDiagram}
+          onGenerateHookPreview={handleGenerateHookPreview}
           onInsertDiagram={handleInsertDiagram}
         />
 

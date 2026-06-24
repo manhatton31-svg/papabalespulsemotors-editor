@@ -1254,6 +1254,193 @@ fn stitch_phone_clips(
     })
 }
 
+const HOOK_TARGET_TOTAL_SECS: f64 = 20.0;
+const HOOK_MIN_TOTAL_SECS: f64 = 15.0;
+const HOOK_MAX_TOTAL_SECS: f64 = 25.0;
+const HOOK_SEGMENT_MIN_SECS: f64 = 3.0;
+const HOOK_SEGMENT_MAX_SECS: f64 = 7.0;
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HookClipResult {
+    file_path: String,
+    duration: f64,
+    friendly_name: String,
+}
+
+fn parse_showinfo_pts_time(line: &str) -> Option<f64> {
+    let key = "pts_time:";
+    let pos = line.find(key)?;
+    let rest = line[pos + key.len()..].trim_start();
+    let token = rest.split_whitespace().next()?;
+    let value: f64 = token.parse().ok()?;
+    if value.is_finite() && value >= 0.0 {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn detect_scene_timestamps(path: &str) -> Result<Vec<f64>, String> {
+    let mut command = tool_command("ffmpeg")?;
+    configure_low_priority(&mut command, true);
+    let output = command
+        .args([
+            "-hide_banner",
+            "-nostdin",
+            "-i",
+            path,
+            "-vf",
+            "select='gt(scene,0.32)',showinfo",
+            "-vsync",
+            "vfr",
+            "-f",
+            "null",
+            "-",
+        ])
+        .output()
+        .map_err(|e| format!("Scene analysis failed: {e}"))?;
+
+    let mut times = Vec::new();
+    for line in String::from_utf8_lossy(&output.stderr).lines() {
+        if let Some(t) = parse_showinfo_pts_time(line) {
+            times.push(t);
+        }
+    }
+
+    times.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    times.dedup_by(|a, b| (*a - *b).abs() < 0.45);
+    Ok(times)
+}
+
+fn plan_hook_segment_ranges(duration: f64, scene_times: &[f64]) -> Vec<(f64, f64)> {
+    if duration <= 0.0 {
+        return Vec::new();
+    }
+
+    if duration <= HOOK_MIN_TOTAL_SECS {
+        return vec![(0.0, duration)];
+    }
+
+    let target_total = HOOK_TARGET_TOTAL_SECS
+        .min(duration * 0.45)
+        .clamp(
+            HOOK_MIN_TOTAL_SECS.min(duration),
+            HOOK_MAX_TOTAL_SECS.min(duration),
+        );
+
+    let margin_start = duration * 0.04;
+    let margin_end = duration * 0.96;
+
+    let mut candidates: Vec<f64> = scene_times
+        .iter()
+        .copied()
+        .filter(|t| *t >= margin_start && *t <= margin_end)
+        .collect();
+
+    if candidates.len() < 3 {
+        for i in 1..=5 {
+            candidates.push(margin_start + (margin_end - margin_start) * (i as f64 / 6.0));
+        }
+        candidates.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        candidates.dedup_by(|a, b| (*a - *b).abs() < 0.45);
+    }
+
+    let num_segments = ((target_total / 5.0).ceil() as usize).clamp(3, 5);
+    let seg_duration =
+        (target_total / num_segments as f64).clamp(HOOK_SEGMENT_MIN_SECS, HOOK_SEGMENT_MAX_SECS);
+
+    let mut ranges = Vec::new();
+    for i in 0..num_segments {
+        let idx = if num_segments <= 1 {
+            0
+        } else {
+            (i * candidates.len().saturating_sub(1)) / (num_segments - 1)
+        };
+        let center = candidates[idx.min(candidates.len().saturating_sub(1))];
+        let start = (center - seg_duration * 0.5)
+            .max(0.0)
+            .min((duration - seg_duration).max(0.0));
+        let end = (start + seg_duration).min(duration);
+        if end - start >= 1.5 {
+            ranges.push((start, end));
+        }
+    }
+
+    if ranges.is_empty() {
+        let end = target_total.min(duration);
+        ranges.push((0.0, end));
+    }
+
+    ranges
+}
+
+/// Analyze the main video and extract engaging 15–25s hook segments for the intro track.
+#[tauri::command]
+fn generate_hook_preview(
+    app: tauri::AppHandle,
+    main_path: String,
+) -> Result<Vec<HookClipResult>, String> {
+    validate_main_video_source(&main_path)?;
+    let duration = resolve_video_duration(&main_path, None)?;
+    let scene_times = detect_scene_timestamps(&main_path).unwrap_or_default();
+    let ranges = plan_hook_segment_ranges(duration, &scene_times);
+
+    if ranges.is_empty() {
+        return Err("Video is too short to generate a hook preview".into());
+    }
+
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let work_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("hooks")
+        .join(format!("hook_{stamp}"));
+    fs::create_dir_all(&work_dir).map_err(|e| e.to_string())?;
+
+    let mut results = Vec::new();
+    for (i, (start, end)) in ranges.iter().enumerate() {
+        let segment_path = work_dir.join(format!("hook_{i:02}.mp4"));
+        let segment_str = segment_path.to_string_lossy().into_owned();
+        let ss = format!("{start:.3}");
+        let to = format!("{end:.3}");
+
+        run_ffmpeg_simple(
+            &[
+                "-y",
+                "-hide_banner",
+                "-nostdin",
+                "-ss",
+                &ss,
+                "-to",
+                &to,
+                "-i",
+                &main_path,
+                "-c",
+                "copy",
+                "-avoid_negative_ts",
+                "make_zero",
+                &segment_str,
+            ],
+            "Failed to extract hook segment",
+            false,
+        )?;
+
+        let seg_duration = (end - start).max(0.0);
+        results.push(HookClipResult {
+            file_path: segment_str,
+            duration: seg_duration,
+            friendly_name: format!("Hook {}", i + 1),
+        });
+    }
+
+    Ok(results)
+}
+
 fn build_timeline_parts(source_duration: f64, segments: &[TimelapseSegmentInput]) -> Vec<TimelinePart> {
     let mut sorted = segments.to_vec();
     sorted.sort_by(|a, b| {
@@ -2556,6 +2743,7 @@ pub fn run() {
             get_video_duration,
             import_main_video,
             stitch_phone_clips,
+            generate_hook_preview,
             start_phone_upload_server,
             stop_phone_upload_server,
             apply_timelapse_segments,
