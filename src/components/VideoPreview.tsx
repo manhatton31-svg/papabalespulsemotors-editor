@@ -24,7 +24,6 @@ import {
   getTimelapseSegmentAt,
   sourceTimeToBakedTime,
 } from '../types/timelapse';
-import { PhoneUploadPanel } from './PhoneUploadPanel';
 import './VideoPreview.css';
 
 const UI_TICK_INTERVAL_MS = 50;
@@ -54,10 +53,8 @@ interface VideoPreviewProps {
   isPlaying: boolean;
   isImporting?: boolean;
   isDragOver?: boolean;
-  phoneUploadOpen?: boolean;
   onImportClick?: () => void;
   onPhoneUploadOpen?: () => void;
-  onPhoneUploadClose?: () => void;
   onPlayheadTick: (time: number) => void;
   onMainDurationReady: (duration: number) => void;
   onEnded: () => void;
@@ -77,10 +74,8 @@ export function VideoPreview({
   isPlaying,
   isImporting = false,
   isDragOver = false,
-  phoneUploadOpen = false,
   onImportClick,
   onPhoneUploadOpen,
-  onPhoneUploadClose,
   onPlayheadTick,
   onMainDurationReady,
   onEnded,
@@ -1189,9 +1184,7 @@ export function VideoPreview({
                 )}
               </div>
             )}
-            {!isImporting && onPhoneUploadClose && (
-              <PhoneUploadPanel active={phoneUploadOpen} onClose={onPhoneUploadClose} />
-            )}
+
             {isDragOver && !isImporting && (
               <span className="preview-drop-badge">Drop video to import</span>
             )}

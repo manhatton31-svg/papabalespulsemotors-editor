@@ -16,8 +16,9 @@ import {
   emptySelectedAssetIds,
   hydrateProject,
   openProjectFile,
-  saveProjectAs,
   saveProjectToPath,
+  saveProjectToProjectsFolder,
+  suggestedProjectName,
 } from './lib/project';
 import { resolveVideoDuration } from './lib/duration';
 import {
@@ -27,9 +28,13 @@ import {
   subscribeExportProgress,
 } from './lib/export';
 import { useVideoDropImport } from './hooks/useVideoDropImport';
-import { subscribePhoneUploadReceived } from './lib/phoneUpload';
-import { loadMainVideoDirect, openMainVideo, openMediaForCategory } from './lib/video';
+import { PhoneUploadModal } from './components/PhoneUploadModal';
+import { ProjectNamingModal } from './components/ProjectNamingModal';
+import { completeClipImportSession, type ImportClipRef } from './lib/importSession';
+import type { PhoneUploadReceivedEvent } from './lib/phoneUpload';
+import { loadMainVideoDirect, openMainVideos, openMediaForCategory } from './lib/video';
 import type { MainVideoSelection } from './lib/video';
+import { cleanProjectName, fileNameWithoutExt } from './utils/names';
 import type { LibraryCategory } from './types/content';
 import type { OverlayTrack } from './types/content';
 import type { MediaAsset, TimelineClip } from './types/project';
@@ -66,6 +71,17 @@ export default function App() {
   const [isImportingVideo, setIsImportingVideo] = useState(false);
   const [isVideoDragOver, setIsVideoDragOver] = useState(false);
   const [phoneUploadOpen, setPhoneUploadOpen] = useState(false);
+  const [pcImportNamingOpen, setPcImportNamingOpen] = useState(false);
+  const [pcImportClips, setPcImportClips] = useState<ImportClipRef[]>([]);
+  const [pcImportProjectName, setPcImportProjectName] = useState('');
+  const [pcImportProcessing, setPcImportProcessing] = useState(false);
+  const [pcImportError, setPcImportError] = useState<string | null>(null);
+  const [saveNamingOpen, setSaveNamingOpen] = useState(false);
+  const [saveProjectNameDraft, setSaveProjectNameDraft] = useState('');
+  const [saveProcessing, setSaveProcessing] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const importSessionActive = phoneUploadOpen || pcImportNamingOpen;
 
   const showStatus = (msg: string) => {
     setStatusMsg(msg);
@@ -193,17 +209,67 @@ export default function App() {
     [loadMainVideo]
   );
 
-  const handleUploadMain = async () => {
-    if (isImportingVideo) return;
-    setIsImportingVideo(true);
+  const applyCompletedImportSession = useCallback(
+    (result: Awaited<ReturnType<typeof completeClipImportSession>>) => {
+      setMediaAssets((prev) => mergeMediaAssets(prev, result.addedBroll));
+      if (result.addedBroll.length > 0) {
+        setSelectedAssetIds((prev) => ({ ...prev, broll: result.addedBroll[0].id }));
+      }
+      loadMainVideo(result.mainVideo);
+      setProjectName(result.projectName);
+      setLeftPanel('broll');
+      showStatus(
+        result.clipCount === 1
+          ? `Project "${result.projectName}" ready — clip added to B-Roll Library`
+          : `Project "${result.projectName}" ready — ${result.clipCount} clips stitched and added to B-Roll Library`
+      );
+    },
+    [loadMainVideo]
+  );
+
+  const handleImportFromPc = async () => {
+    if (isImportingVideo || importSessionActive) return;
     try {
-      const result = await openMainVideo();
-      if (!result) return;
-      loadMainVideo(result);
+      const paths = await openMainVideos();
+      if (paths.length === 0) return;
+
+      setPhoneUploadOpen(false);
+      setPcImportClips(
+        paths.map((filePath) => ({
+          sourcePath: filePath,
+          displayName: fileNameWithoutExt(filePath),
+        }))
+      );
+      setPcImportProjectName(cleanProjectName(fileNameWithoutExt(paths[0])));
+      setPcImportError(null);
+      setPcImportNamingOpen(true);
     } catch (err) {
       showStatus(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  const handlePcImportConfirm = async () => {
+    const trimmed = pcImportProjectName.trim();
+    if (!trimmed) {
+      setPcImportError('Enter a project name');
+      return;
+    }
+
+    setIsImportingVideo(true);
+    setPcImportProcessing(true);
+    setPcImportError(null);
+    try {
+      const result = await completeClipImportSession(pcImportClips, trimmed);
+      applyCompletedImportSession(result);
+      setPcImportNamingOpen(false);
+      setPcImportClips([]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setPcImportError(message);
+      showStatus(`Import failed: ${message}`);
     } finally {
       setIsImportingVideo(false);
+      setPcImportProcessing(false);
     }
   };
 
@@ -213,22 +279,29 @@ export default function App() {
     setIsVideoDragOver
   );
 
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    subscribePhoneUploadReceived((event) => {
-      setPhoneUploadOpen(false);
-      showStatus(`Received ${event.originalName} from phone`);
-      importMainVideoFromPath(event.sourcePath);
-    })
-      .then((fn) => {
-        unlisten = fn;
-      })
-      .catch(() => {});
+  const handlePhoneUploadSessionComplete = useCallback(
+    async (clips: PhoneUploadReceivedEvent[], name: string) => {
+      if (clips.length === 0) {
+        throw new Error('No clips uploaded');
+      }
 
-    return () => {
-      unlisten?.();
-    };
-  }, [importMainVideoFromPath]);
+      setIsImportingVideo(true);
+      try {
+        const result = await completeClipImportSession(
+          clips.map((clip) => ({
+            sourcePath: clip.sourcePath,
+            displayName: clip.originalName,
+          })),
+          name
+        );
+        applyCompletedImportSession(result);
+      } finally {
+        setIsImportingVideo(false);
+        setPhoneUploadOpen(false);
+      }
+    },
+    [applyCompletedImportSession]
+  );
 
   const handleImportContent = async (category: LibraryCategory) => {
     try {
@@ -463,21 +536,78 @@ export default function App() {
     }
   };
 
-  const handleSaveProject = async () => {
-    try {
-      const project = getProjectSnapshot();
-      if (projectPath) {
-        const ok = await saveProjectToPath(project, projectPath);
-        showStatus(ok ? 'Project saved' : 'Save failed');
-      } else {
-        const path = await saveProjectAs(project);
-        if (path) {
-          setProjectPath(path);
-          showStatus('Project saved');
-        }
+  const persistProject = useCallback(
+    async (name: string, filePath?: string | null) => {
+      const project = buildProject({
+        name: name.trim() || 'Untitled Project',
+        mainVideoPath,
+        mainVideoDuration,
+        mediaAssets,
+        timelineClips,
+        selectedAssetIds,
+        timelapseSegments,
+      });
+
+      if (filePath) {
+        const ok = await saveProjectToPath(project, filePath);
+        if (!ok) throw new Error('Could not write project file');
+        return filePath;
       }
+
+      return saveProjectToProjectsFolder(project, name);
+    },
+    [
+      mainVideoPath,
+      mainVideoDuration,
+      mediaAssets,
+      timelineClips,
+      selectedAssetIds,
+      timelapseSegments,
+    ]
+  );
+
+  const handleSaveProject = async () => {
+    if (saveProcessing) return;
+
+    try {
+      if (projectPath) {
+        setSaveProcessing(true);
+        await persistProject(projectName, projectPath);
+        showStatus('Project saved successfully');
+        return;
+      }
+
+      setSaveProjectNameDraft(suggestedProjectName(projectName, mainVideoPath));
+      setSaveError(null);
+      setSaveNamingOpen(true);
     } catch (err) {
       showStatus(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setSaveProcessing(false);
+    }
+  };
+
+  const handleSaveProjectConfirm = async () => {
+    const trimmed = saveProjectNameDraft.trim();
+    if (!trimmed) {
+      setSaveError('Enter a project name');
+      return;
+    }
+
+    setSaveProcessing(true);
+    setSaveError(null);
+    try {
+      const path = await persistProject(trimmed);
+      setProjectPath(path);
+      setProjectName(trimmed);
+      setSaveNamingOpen(false);
+      showStatus('Project saved successfully');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setSaveError(message);
+      showStatus(`Save failed: ${message}`);
+    } finally {
+      setSaveProcessing(false);
     }
   };
 
@@ -561,21 +691,19 @@ export default function App() {
         </div>
 
         <div className="topbar-actions">
-          {!mainVideoUrl && (
-            <button
-              type="button"
-              className="btn btn-topbar-accent"
-              onClick={() => setPhoneUploadOpen(true)}
-              disabled={isImportingVideo}
-            >
-              From Phone
-            </button>
-          )}
+          <button
+            type="button"
+            className="btn btn-topbar-accent"
+            onClick={() => setPhoneUploadOpen(true)}
+            disabled={isImportingVideo || importSessionActive}
+          >
+            From Phone
+          </button>
           <button
             type="button"
             className="btn btn-topbar"
-            onClick={handleUploadMain}
-            disabled={isImportingVideo}
+            onClick={handleImportFromPc}
+            disabled={isImportingVideo || importSessionActive}
           >
             {isImportingVideo ? 'Importing…' : 'Import from PC'}
           </button>
@@ -626,7 +754,7 @@ export default function App() {
         </div>
       )}
 
-      <div className="main-stage">
+      <div className={`main-stage ${importSessionActive ? 'main-stage-import-session' : ''}`}>
         <LeftSidebar
           activePanel={leftPanel}
           onPanelChange={setLeftPanel}
@@ -667,10 +795,8 @@ export default function App() {
             isPlaying={isPlaying}
             isImporting={isImportingVideo}
             isDragOver={isVideoDragOver}
-            phoneUploadOpen={phoneUploadOpen}
-            onImportClick={handleUploadMain}
+            onImportClick={handleImportFromPc}
             onPhoneUploadOpen={() => setPhoneUploadOpen(true)}
-            onPhoneUploadClose={() => setPhoneUploadOpen(false)}
             onPlayheadTick={handlePlayheadTick}
             onMainDurationReady={handleMainDurationReady}
             onEnded={handleEnded}
@@ -712,6 +838,49 @@ export default function App() {
           onTimelapseClick={handleTimelapseClick}
         />
       </div>
+
+      <PhoneUploadModal
+        open={phoneUploadOpen}
+        onClose={() => setPhoneUploadOpen(false)}
+        onSessionComplete={handlePhoneUploadSessionComplete}
+      />
+
+      <ProjectNamingModal
+        open={pcImportNamingOpen}
+        clipCount={pcImportClips.length}
+        projectName={pcImportProjectName}
+        processing={pcImportProcessing}
+        error={pcImportError}
+        onProjectNameChange={setPcImportProjectName}
+        onClose={() => {
+          if (!pcImportProcessing) {
+            setPcImportNamingOpen(false);
+            setPcImportClips([]);
+            setPcImportError(null);
+          }
+        }}
+        onConfirm={handlePcImportConfirm}
+      />
+
+      <ProjectNamingModal
+        open={saveNamingOpen}
+        projectName={saveProjectNameDraft}
+        processing={saveProcessing}
+        error={saveError}
+        onProjectNameChange={setSaveProjectNameDraft}
+        onClose={() => {
+          if (!saveProcessing) {
+            setSaveNamingOpen(false);
+            setSaveError(null);
+          }
+        }}
+        onConfirm={handleSaveProjectConfirm}
+        title="Save project"
+        hint="This name is used for your project file and as the default YouTube title when exporting."
+        confirmLabel="Save project"
+        processingLabel="Saving…"
+        inputLabel="Project name"
+      />
 
       {statusMsg && <div className="status-toast">{statusMsg}</div>}
     </div>

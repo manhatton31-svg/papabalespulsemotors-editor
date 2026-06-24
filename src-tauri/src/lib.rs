@@ -907,6 +907,252 @@ fn import_main_video(source_path: String) -> Result<ImportMainVideoResult, Strin
     })
 }
 
+const PHONE_STITCH_CROSSFADE_SECS: f64 = 0.7;
+const PHONE_STITCH_SCALE_FILTER: &str = "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p";
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StitchPhoneClipsResult {
+    file_path: String,
+    duration: f64,
+}
+
+fn sanitize_stitch_project_name(name: &str) -> String {
+    let mut out = String::new();
+    for c in name.chars() {
+        if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+            out.push(c);
+        } else if c.is_whitespace() {
+            out.push('_');
+        }
+    }
+    let trimmed = out.trim_matches('_');
+    if trimmed.is_empty() {
+        "phone_project".to_string()
+    } else {
+        trimmed.chars().take(48).collect()
+    }
+}
+
+fn normalize_phone_clip_for_stitch(input_path: &str, output_path: &str) -> Result<(), String> {
+    let vf = PHONE_STITCH_SCALE_FILTER;
+    let with_audio = run_ffmpeg_simple(
+        &[
+            "-y",
+            "-hide_banner",
+            "-nostdin",
+            "-i",
+            input_path,
+            "-vf",
+            vf,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "fast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-ar",
+            "48000",
+            "-ac",
+            "2",
+            "-shortest",
+            output_path,
+        ],
+        "Failed to normalize clip for stitching",
+        false,
+    );
+    if with_audio.is_ok() {
+        return Ok(());
+    }
+
+    run_ffmpeg_simple(
+        &[
+            "-y",
+            "-hide_banner",
+            "-nostdin",
+            "-i",
+            input_path,
+            "-f",
+            "lavfi",
+            "-i",
+            "anullsrc=channel_layout=stereo:sample_rate=48000",
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
+            "-vf",
+            vf,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "fast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-shortest",
+            output_path,
+        ],
+        "Failed to normalize clip for stitching (silent audio fallback)",
+        false,
+    )
+}
+
+fn build_phone_stitch_filter(durations: &[f64], crossfade: f64) -> String {
+    let count = durations.len();
+    if count < 2 {
+        return String::new();
+    }
+
+    let mut filter = String::new();
+    let mut video_prev = "0:v".to_string();
+    let mut audio_prev = "0:a".to_string();
+
+    for index in 1..count {
+        let offset: f64 = durations[..index].iter().sum::<f64>() - index as f64 * crossfade;
+        let video_out = if index == count - 1 {
+            "vout".to_string()
+        } else {
+            format!("v{index}")
+        };
+        let audio_out = if index == count - 1 {
+            "aout".to_string()
+        } else {
+            format!("a{index}")
+        };
+
+        filter.push_str(&format!(
+            "[{video_prev}][{index}:v]xfade=transition=fade:duration={crossfade:.3}:offset={offset:.3}[{video_out}];"
+        ));
+        filter.push_str(&format!(
+            "[{audio_prev}][{index}:a]acrossfade=d={crossfade:.3}:c1=tri:c2=tri[{audio_out}];"
+        ));
+
+        video_prev = video_out;
+        audio_prev = audio_out;
+    }
+
+    filter
+}
+
+/// Stitch phone-uploaded clips in order with smooth crossfades between each pair.
+#[tauri::command]
+fn stitch_phone_clips(
+    app: tauri::AppHandle,
+    source_paths: Vec<String>,
+    project_name: String,
+) -> Result<StitchPhoneClipsResult, String> {
+    if source_paths.is_empty() {
+        return Err("No clips to stitch".into());
+    }
+
+    for path in &source_paths {
+        validate_main_video_source(path)?;
+    }
+
+    if source_paths.len() == 1 {
+        let path = source_paths[0].clone();
+        let duration = resolve_video_duration(&path, None).unwrap_or(0.0);
+        return Ok(StitchPhoneClipsResult {
+            file_path: path,
+            duration,
+        });
+    }
+
+    let crossfade = PHONE_STITCH_CROSSFADE_SECS;
+    let work_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("phone_stitch")
+        .join(format!(
+            "{}_{}",
+            sanitize_stitch_project_name(&project_name),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0)
+        ));
+    if work_dir.exists() {
+        let _ = fs::remove_dir_all(&work_dir);
+    }
+    fs::create_dir_all(&work_dir).map_err(|e| e.to_string())?;
+
+    let mut normalized_paths = Vec::new();
+    let mut durations = Vec::new();
+
+    for (index, source_path) in source_paths.iter().enumerate() {
+        let normalized = work_dir.join(format!("norm_{index:03}.mp4"));
+        let normalized_str = normalized.to_string_lossy().into_owned();
+        normalize_phone_clip_for_stitch(source_path, &normalized_str)?;
+        let duration = resolve_video_duration(&normalized_str, None).unwrap_or(0.0);
+        if duration <= crossfade {
+            return Err(format!(
+                "Clip {} is too short for a {crossfade}s crossfade — upload longer clips or fewer files",
+                index + 1
+            ));
+        }
+        normalized_paths.push(normalized_str);
+        durations.push(duration);
+    }
+
+    let filter = build_phone_stitch_filter(&durations, crossfade);
+    let output_path = work_dir
+        .join("stitched.mp4")
+        .to_string_lossy()
+        .into_owned();
+
+    let mut args = vec!["-y", "-hide_banner", "-nostdin"];
+    for path in &normalized_paths {
+        args.push("-i");
+        args.push(path.as_str());
+    }
+    args.extend([
+        "-filter_complex",
+        &filter,
+        "-map",
+        "[vout]",
+        "-map",
+        "[aout]",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "23",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        "-movflags",
+        "+faststart",
+        &output_path,
+    ]);
+
+    run_ffmpeg_simple(&args, "Failed to stitch phone clips", false)?;
+
+    let duration = resolve_video_duration(&output_path, None).unwrap_or_else(|_| {
+        durations.iter().sum::<f64>() - (durations.len() as f64 - 1.0) * crossfade
+    });
+
+    Ok(StitchPhoneClipsResult {
+        file_path: output_path,
+        duration,
+    })
+}
+
 fn build_timeline_parts(source_duration: f64, segments: &[TimelapseSegmentInput]) -> Vec<TimelinePart> {
     let mut sorted = segments.to_vec();
     sorted.sort_by(|a, b| {
@@ -2189,6 +2435,7 @@ pub fn run() {
             get_app_data_dir,
             get_video_duration,
             import_main_video,
+            stitch_phone_clips,
             start_phone_upload_server,
             stop_phone_upload_server,
             apply_timelapse_segments,

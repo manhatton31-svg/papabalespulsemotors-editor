@@ -13,6 +13,13 @@ export interface PhoneUploadReceivedEvent {
   originalName: string;
 }
 
+export interface StitchPhoneClipsResult {
+  filePath: string;
+  duration: number;
+}
+
+export const PHONE_STITCH_CROSSFADE_SECS = 0.7;
+
 export async function startPhoneUploadServer(): Promise<PhoneUploadServerInfo> {
   if (!isTauri()) {
     throw new Error('Phone upload requires the desktop app');
@@ -32,4 +39,17 @@ export async function subscribePhoneUploadReceived(
     handler(e.payload);
   });
   return unlisten;
+}
+
+export async function stitchPhoneClips(
+  sourcePaths: string[],
+  projectName: string
+): Promise<StitchPhoneClipsResult> {
+  if (!isTauri()) {
+    throw new Error('Stitching requires the desktop app');
+  }
+  return invoke<StitchPhoneClipsResult>('stitch_phone_clips', {
+    sourcePaths,
+    projectName,
+  });
 }

@@ -81,10 +81,10 @@ export async function loadMainVideoDirect(sourcePath: string): Promise<MainVideo
   };
 }
 
-/** Open native file dialog (defaults to Downloads) and import for editing. */
-export async function openMainVideo(): Promise<MainVideoSelection | null> {
+/** Open native file dialog (defaults to Downloads) and return one or more video paths. */
+export async function openMainVideos(): Promise<string[]> {
   if (!isTauri()) {
-    return null;
+    return [];
   }
 
   let defaultPath: string | undefined;
@@ -95,7 +95,7 @@ export async function openMainVideo(): Promise<MainVideoSelection | null> {
   }
 
   const selected = await open({
-    multiple: false,
+    multiple: true,
     directory: false,
     defaultPath,
     filters: [
@@ -104,12 +104,19 @@ export async function openMainVideo(): Promise<MainVideoSelection | null> {
         extensions: VIDEO_EXTENSIONS,
       },
     ],
-    title: 'Import Video (phone, camera, or downloads)',
+    title: 'Import videos from PC',
   });
 
-  if (!selected || Array.isArray(selected)) return null;
+  if (!selected) return [];
+  const paths = Array.isArray(selected) ? selected : [selected];
+  return paths.filter((filePath) => isVideoFilePath(filePath));
+}
 
-  return loadMainVideoDirect(selected);
+/** Open native file dialog (defaults to Downloads) and import a single video for editing. */
+export async function openMainVideo(): Promise<MainVideoSelection | null> {
+  const paths = await openMainVideos();
+  if (paths.length === 0) return null;
+  return loadMainVideoDirect(paths[0]);
 }
 
 function mediaTypeForPath(filePath: string): MediaType {

@@ -154,6 +154,10 @@
   overflow: hidden;
 }
 
+.main-stage-import-session .left-sidebar {
+  display: none;
+}
+
 .center-stage {
   display: flex;
   flex-direction: column;

@@ -1,0 +1,35 @@
+.project-naming-hint {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.project-naming-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.project-naming-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.project-naming-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.project-naming-error {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: #f85149;
+}

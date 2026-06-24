@@ -10,8 +10,9 @@ import type {
   PulseProjectV1,
   TimelineClip,
 } from '../types/project';
-import { readTextFile, writeTextFile } from './tauriFs';
+import { getAppDataDir, readTextFile, writeTextFile } from './tauriFs';
 import { toAssetUrl } from './video';
+import { cleanProjectName, fileNameWithoutExt } from '../utils/names';
 
 const PROJECT_FILTER = {
   name: 'Pulse Project',
@@ -142,6 +143,51 @@ export async function hydrateProject(project: AnyPulseProject): Promise<{
     },
     projectName: normalized.name || 'Untitled',
   };
+}
+
+const PROJECTS_SUBDIR = 'projects';
+
+/** Dedicated folder for .pulseproj files (inside app data dir). */
+export async function getProjectsDir(): Promise<string> {
+  const appData = await getAppDataDir();
+  return `${appData.replace(/[/\\]+$/, '')}/${PROJECTS_SUBDIR}`;
+}
+
+/** Strip characters invalid in Windows/macOS filenames; keep spaces and punctuation like hyphens. */
+export function sanitizeProjectFileName(name: string): string {
+  const trimmed = name.replace(/[\\/:*?"<>|]/g, '').trim();
+  return trimmed || 'Untitled';
+}
+
+export function projectFilePathForName(projectsDir: string, name: string): string {
+  const separator = projectsDir.includes('\\') ? '\\' : '/';
+  return `${projectsDir}${separator}${sanitizeProjectFileName(name)}.pulseproj`;
+}
+
+export function suggestedProjectName(
+  currentName: string,
+  mainVideoPath: string | null
+): string {
+  if (mainVideoPath) {
+    return cleanProjectName(fileNameWithoutExt(mainVideoPath));
+  }
+  if (currentName && currentName !== 'Untitled') {
+    return currentName;
+  }
+  return 'Untitled Project';
+}
+
+/** Save to the default projects folder using the project name as the filename. */
+export async function saveProjectToProjectsFolder(
+  project: PulseProject,
+  projectName: string
+): Promise<string> {
+  const trimmedName = projectName.trim() || 'Untitled Project';
+  const projectsDir = await getProjectsDir();
+  const filePath = projectFilePathForName(projectsDir, trimmedName);
+  const payload: PulseProject = { ...project, name: trimmedName };
+  await writeTextFile(filePath, JSON.stringify(payload, null, 2));
+  return filePath;
 }
 
 export async function saveProjectAs(project: PulseProject): Promise<string | null> {

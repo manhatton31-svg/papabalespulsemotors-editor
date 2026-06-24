@@ -3,6 +3,24 @@ export function fileNameWithoutExt(filePath: string): string {
   return name.replace(/\.[^.]+$/, '');
 }
 
+/** Clean uploaded or picked filename for default project / library names. */
+export function cleanProjectName(originalName: string): string {
+  let base = originalName.replace(/\.[^.]+$/, '').trim();
+  base = base.replace(/^\d+_/, '');
+  base = base
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!base) return 'Untitled Project';
+  if (base.length > 48) return base.slice(0, 48).trim();
+  return base;
+}
+
+/** @deprecated Use cleanProjectName */
+export function cleanPhoneProjectName(originalName: string): string {
+  return cleanProjectName(originalName);
+}
+
 function normalizePath(p: string): string {
   return p.replace(/\\/g, '/').toLowerCase();
 }

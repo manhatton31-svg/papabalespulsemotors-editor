@@ -1,0 +1,175 @@
+.phone-upload-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 8, 14, 0.82);
+  backdrop-filter: blur(4px);
+}
+
+.phone-upload-modal {
+  position: relative;
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 28px 32px 32px;
+  border-radius: 14px;
+  border: 1px solid rgba(45, 212, 191, 0.28);
+  background: linear-gradient(165deg, #141b24 0%, #0d1117 100%);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  text-align: center;
+  animation: phoneModalIn 0.18s ease-out;
+}
+
+@keyframes phoneModalIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.phone-upload-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  border: none;
+  background: transparent;
+  color: #9fb0c3;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--radius);
+}
+
+.phone-upload-modal-close:hover:not(:disabled) {
+  color: #e6edf3;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.phone-upload-modal-close:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.phone-upload-modal-title {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #e6edf3;
+  line-height: 1.3;
+}
+
+.phone-upload-modal-subtitle {
+  margin: 0 0 20px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #9fb0c3;
+}
+
+.phone-upload-modal-status {
+  margin: 0;
+  font-size: 13px;
+  color: #9fb0c3;
+}
+
+.phone-upload-modal-error {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+
+.phone-upload-modal-error p {
+  margin: 0;
+  font-size: 13px;
+  color: #f85149;
+}
+
+.phone-upload-modal-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.phone-upload-modal-qr {
+  display: flex;
+  justify-content: center;
+  padding: 18px;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+
+.phone-upload-modal-wifi {
+  margin: 0;
+  font-size: 13px;
+  color: #9fb0c3;
+}
+
+.phone-upload-modal-url {
+  font-size: 11px;
+  color: #2dd4bf;
+  word-break: break-all;
+  text-decoration: none;
+}
+
+.phone-upload-modal-url:hover {
+  text-decoration: underline;
+}
+
+.phone-upload-modal-clips {
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.22);
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.phone-upload-modal-clips-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #2dd4bf;
+  margin-bottom: 8px;
+}
+
+.phone-upload-modal-clips ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.phone-upload-modal-clips li {
+  font-size: 12px;
+  color: #c9d1d9;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phone-upload-modal-clips li:last-child {
+  border-bottom: none;
+}
+
+.phone-upload-modal-done {
+  margin-top: 4px;
+  min-width: 200px;
+  padding: 10px 24px;
+  font-size: 14px;
+}
+
