@@ -705,6 +705,64 @@ struct ExportEncodeProfile {
     crf: &'static str,
 }
 
+#[derive(Clone, serde::Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct ExportSettingsInput {
+    #[serde(default = "default_export_quality")]
+    quality_preset: String,
+    #[serde(default = "default_export_resolution")]
+    resolution: String,
+}
+
+fn default_export_quality() -> String {
+    "fast".into()
+}
+
+fn default_export_resolution() -> String {
+    "original".into()
+}
+
+fn export_encode_profile(preset: &str) -> ExportEncodeProfile {
+    match preset {
+        "high" => ExportEncodeProfile {
+            preset: "slow",
+            crf: "18",
+        },
+        "youtube" => ExportEncodeProfile {
+            preset: "medium",
+            crf: "20",
+        },
+        _ => ExportEncodeProfile {
+            preset: "ultrafast",
+            crf: "23",
+        },
+    }
+}
+
+fn resolution_scale_filter(resolution: &str) -> Option<&'static str> {
+    match resolution {
+        "1080p" => Some(
+            "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2",
+        ),
+        "4k" => Some(
+            "scale=3840:2160:force_original_aspect_ratio=decrease,pad=3840:2160:(ow-iw)/2:(oh-ih)/2",
+        ),
+        _ => None,
+    }
+}
+
+fn needs_video_reencode(settings: &ExportSettingsInput) -> bool {
+    settings.resolution != "original"
+}
+
+fn append_final_video_output(filter: &mut String, video_label: &str, settings: &ExportSettingsInput) {
+    if let Some(scale) = resolution_scale_filter(&settings.resolution) {
+        filter.push_str(&format!("[{video_label}]{scale},format=yuv420p[outv];"));
+    } else {
+        filter.push_str(&format!("[{video_label}]format=yuv420p[outv];"));
+    }
+}
+
 #[derive(Clone)]
 struct TimelinePart {
     start: f64,
@@ -731,6 +789,49 @@ fn get_app_data_dir(app: tauri::AppHandle) -> Result<String, String> {
         .app_data_dir()
         .map(|p| p.to_string_lossy().into_owned())
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn open_path_in_explorer(path: String) -> Result<(), String> {
+    let path_buf = PathBuf::from(&path);
+    let target = if path_buf.is_file() {
+        path_buf
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or(path_buf)
+    } else {
+        path_buf
+    };
+
+    if !target.exists() {
+        return Err(format!("Path not found: {}", target.to_string_lossy()));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(target.as_os_str())
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(target.as_os_str())
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(target.as_os_str())
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
 }
 
 fn parse_ffmpeg_duration(stderr: &str) -> Option<f64> {
@@ -1501,6 +1602,7 @@ fn overlay_track_priority(track: &str) -> i32 {
         "intro" => 3,
         "outro" => 2,
         "broll" => 1,
+        "diagram" => 1,
         _ => 0,
     }
 }
@@ -1534,6 +1636,7 @@ fn build_export_filter(
     parts: &[TimelinePart],
     overlays: &[OverlayClipInput],
     include_audio: bool,
+    settings: &ExportSettingsInput,
 ) -> String {
     let mut filter = build_video_filter(parts);
     if include_audio {
@@ -1583,10 +1686,7 @@ fn build_export_filter(
         current_video = out;
     }
 
-    filter.push_str(&format!(
-        "[{}]format=yuv420p[outv];",
-        current_video
-    ));
+    append_final_video_output(&mut filter, &current_video, settings);
 
     filter
 }
@@ -1743,6 +1843,7 @@ fn build_overlay_filter_on_base(
     overlays: &[OverlayClipInput],
     parts: &[TimelinePart],
     overlay_input_start: usize,
+    settings: &ExportSettingsInput,
 ) -> String {
     let mut filter = String::new();
     let mut sorted: Vec<&OverlayClipInput> = overlays.iter().collect();
@@ -1790,7 +1891,7 @@ fn build_overlay_filter_on_base(
         current_video = out;
     }
 
-    filter.push_str(&format!("[{current_video}]format=yuv420p[outv];"));
+    append_final_video_output(&mut filter, &current_video, settings);
     filter
 }
 
@@ -2051,6 +2152,7 @@ fn export_with_filter_graph(
     base_input: Option<&str>,
     out_duration: f64,
     export_start: Instant,
+    settings: &ExportSettingsInput,
 ) -> Result<(), String> {
     let thread_limit = ffmpeg_thread_limit_export();
     let filter = if base_input.is_some() {
@@ -2061,16 +2163,19 @@ fn export_with_filter_graph(
                 overlay_clips,
                 parts,
                 overlay_input_start,
+                settings,
             ));
         } else {
-            filter.push_str("[0:v]format=yuv420p[outv];");
+            let mut base_only = String::from("[0:v]setpts=PTS-STARTPTS[basev];");
+            append_final_video_output(&mut base_only, "basev", settings);
+            filter.push_str(&base_only);
         }
         if include_audio {
             filter.push_str(&build_audio_base_filter_from_input(1, parts));
         }
         filter
     } else {
-        build_export_filter(parts, overlay_clips, include_audio)
+        build_export_filter(parts, overlay_clips, include_audio, settings)
     };
 
     let mut args: Vec<String> = vec![
@@ -2128,16 +2233,21 @@ fn export_with_filter_graph(
         // Base video is already the final output — caller should rename instead.
         return Err("Internal export error: redundant finalize pass".into());
     } else {
+        let profile = export_encode_profile(&settings.quality_preset);
         args.push("-c:v".into());
         args.push("libx264".into());
         args.push("-preset".into());
-        args.push("ultrafast".into());
+        args.push(profile.preset.into());
         args.push("-crf".into());
-        args.push("23".into());
+        args.push(profile.crf.into());
         args.push("-pix_fmt".into());
         args.push("yuv420p".into());
         args.push("-threads".into());
         args.push(thread_limit);
+        if settings.quality_preset == "youtube" {
+            args.push("-movflags".into());
+            args.push("+faststart".into());
+        }
     }
 
     args.push(output_path.to_string());
@@ -2174,6 +2284,7 @@ fn export_mp4_sync(
     timelapse_segments: Vec<TimelapseSegmentInput>,
     overlay_clips: Vec<OverlayClipInput>,
     source_duration: Option<f64>,
+    export_settings: ExportSettingsInput,
 ) -> Result<ExportMp4Result, String> {
     if main_path.is_empty() {
         return Err("No main video loaded".into());
@@ -2219,7 +2330,10 @@ fn export_mp4_sync(
     emit_export_progress(&app, job_id, 0.0, 0, "running", Some("Starting background export"));
 
     let export_result = (|| {
-        if !has_timelapse_parts(&parts) && overlay_clips.is_empty() {
+        let can_stream_copy =
+            !has_timelapse_parts(&parts) && overlay_clips.is_empty() && !needs_video_reencode(&export_settings);
+
+        if can_stream_copy {
             check_export_cancel(cancel)?;
             export_stream_copy(
                 &app,
@@ -2247,6 +2361,7 @@ fn export_mp4_sync(
                 None,
                 out_duration,
                 start,
+                &export_settings,
             )?;
         } else {
             check_export_cancel(cancel)?;
@@ -2262,6 +2377,7 @@ fn export_mp4_sync(
                 None,
                 out_duration,
                 start,
+                &export_settings,
             )?;
         }
 
@@ -2298,6 +2414,7 @@ fn start_export_mp4(
     timelapse_segments: Vec<TimelapseSegmentInput>,
     overlay_clips: Vec<OverlayClipInput>,
     source_duration: Option<f64>,
+    export_settings: Option<ExportSettingsInput>,
 ) -> Result<ExportStartResult, String> {
     if main_path.is_empty() {
         return Err("No main video loaded".into());
@@ -2332,6 +2449,7 @@ fn start_export_mp4(
     let app_for_thread = app.clone();
     let output_for_result = output_path.clone();
     let job_id_for_thread = job_id.clone();
+    let settings = export_settings.unwrap_or_default();
 
     std::thread::spawn(move || {
         let result = export_mp4_sync(
@@ -2343,6 +2461,7 @@ fn start_export_mp4(
             timelapse_segments,
             overlay_clips,
             source_duration,
+            settings,
         );
 
         if let Ok(mut state) = shared.lock() {
@@ -2433,6 +2552,7 @@ pub fn run() {
             read_text_file,
             write_text_file,
             get_app_data_dir,
+            open_path_in_explorer,
             get_video_duration,
             import_main_video,
             stitch_phone_clips,

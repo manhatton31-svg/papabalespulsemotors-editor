@@ -1,9 +1,30 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { save } from '@tauri-apps/plugin-dialog';
+import { downloadDir } from '@tauri-apps/api/path';
+import { open } from '@tauri-apps/plugin-dialog';
 import type { OverlayTrack } from '../types/content';
 import type { MediaAsset, TimelineClip } from '../types/project';
 import type { TimelapseSegment } from '../types/timelapse';
+import { getAppDataDir } from './tauriFs';
+import { sanitizeProjectFileName } from './project';
+
+export type ExportQualityPreset = 'high' | 'youtube' | 'fast';
+export type ExportResolution = 'original' | '1080p' | '4k';
+
+export interface ExportIncludeOptions {
+  broll: boolean;
+  introsOutros: boolean;
+  timelapse: boolean;
+  diagrams: boolean;
+}
+
+export interface ExportSettings {
+  fileName: string;
+  destinationFolder: string;
+  qualityPreset: ExportQualityPreset;
+  resolution: ExportResolution;
+  include: ExportIncludeOptions;
+}
 
 export interface ExportStartResult {
   jobId: string;
@@ -25,6 +46,55 @@ export interface ExportCompleteEvent {
   duration: number;
   status: string;
   message?: string;
+}
+
+export const EXPORT_QUALITY_OPTIONS: { id: ExportQualityPreset; label: string; hint: string }[] = [
+  { id: 'high', label: 'High Quality', hint: 'Best visual quality, slower encode' },
+  { id: 'youtube', label: 'YouTube Optimized', hint: 'Balanced quality with fast-start playback' },
+  { id: 'fast', label: 'Fast Export', hint: 'Quickest render, good for drafts' },
+];
+
+export const EXPORT_RESOLUTION_OPTIONS: { id: ExportResolution; label: string }[] = [
+  { id: 'original', label: 'Original' },
+  { id: '1080p', label: '1080p' },
+  { id: '4k', label: '4K' },
+];
+
+export function defaultExportFileName(projectName: string): string {
+  const base = sanitizeProjectFileName(projectName || 'export');
+  return base.endsWith('.mp4') ? base.slice(0, -4) : base;
+}
+
+export function buildExportOutputPath(folder: string, fileName: string): string {
+  const trimmedFolder = folder.replace(/[/\\]+$/, '');
+  const safeName = sanitizeProjectFileName(fileName.replace(/\.mp4$/i, ''));
+  const separator = trimmedFolder.includes('\\') ? '\\' : '/';
+  return `${trimmedFolder}${separator}${safeName}.mp4`;
+}
+
+export async function getDefaultExportFolder(): Promise<string> {
+  try {
+    return await downloadDir();
+  } catch {
+    const appData = await getAppDataDir();
+    return `${appData.replace(/[/\\]+$/, '')}/exports`;
+  }
+}
+
+export async function pickExportFolder(currentFolder?: string): Promise<string | null> {
+  const selected = await open({
+    title: 'Choose export folder',
+    directory: true,
+    multiple: false,
+    defaultPath: currentFolder,
+  });
+  if (!selected || Array.isArray(selected)) return null;
+  return selected;
+}
+
+export async function openExportFolder(outputPath: string): Promise<void> {
+  if (!isTauri()) return;
+  await invoke('open_path_in_explorer', { path: outputPath });
 }
 
 export function subscribeExportProgress(
@@ -51,27 +121,28 @@ interface ExportOverlayClip {
   is_image: boolean;
 }
 
-const FULL_FRAME_TRACKS: OverlayTrack[] = ['intro', 'outro', 'broll'];
-
-export async function pickExportPath(defaultName: string): Promise<string | null> {
-  const path = await save({
-    defaultPath: defaultName,
-    filters: [{ name: 'MP4 Video', extensions: ['mp4'] }],
-  });
-  return path ?? null;
-}
-
 function buildOverlayClips(
   clips: TimelineClip[],
-  assets: MediaAsset[]
+  assets: MediaAsset[],
+  include: ExportIncludeOptions
 ): ExportOverlayClip[] {
   const assetById = new Map(assets.map((a) => [a.id, a]));
   const result: ExportOverlayClip[] = [];
 
   for (const clip of clips) {
-    if (!FULL_FRAME_TRACKS.includes(clip.track as OverlayTrack)) continue;
+    if (clip.track === 'main' || clip.track === 'timelapse') continue;
+    const track = clip.track as OverlayTrack;
+
+    const allowed =
+      (track === 'broll' && include.broll) ||
+      ((track === 'intro' || track === 'outro') && include.introsOutros) ||
+      (track === 'diagram' && include.diagrams);
+
+    if (!allowed) continue;
+
     const asset = assetById.get(clip.assetId);
     if (!asset) continue;
+
     result.push({
       file_path: asset.filePath,
       start_time: clip.startTime,
@@ -91,12 +162,22 @@ function buildExportInvokeArgs(params: {
   timelapseSegments: TimelapseSegment[];
   timelineClips: TimelineClip[];
   mediaAssets: MediaAsset[];
+  settings: ExportSettings;
 }) {
-  const overlayClips = buildOverlayClips(params.timelineClips, params.mediaAssets);
+  const overlayClips = buildOverlayClips(
+    params.timelineClips,
+    params.mediaAssets,
+    params.settings.include
+  );
+
+  const timelapseSegments = params.settings.include.timelapse
+    ? params.timelapseSegments
+    : [];
+
   return {
     mainPath: params.mainVideoPath,
     outputPath: params.outputPath,
-    timelapseSegments: params.timelapseSegments.map((s) => ({
+    timelapseSegments: timelapseSegments.map((s) => ({
       start_time: s.startTime,
       end_time: s.endTime,
       speed_factor: s.speedFactor,
@@ -104,6 +185,10 @@ function buildExportInvokeArgs(params: {
     overlayClips,
     sourceDuration:
       params.sourceVideoDuration > 0 ? params.sourceVideoDuration : undefined,
+    exportSettings: {
+      qualityPreset: params.settings.qualityPreset,
+      resolution: params.settings.resolution,
+    },
   };
 }
 
@@ -111,11 +196,10 @@ function buildExportInvokeArgs(params: {
 export async function startBackgroundExport(params: {
   mainVideoPath: string;
   sourceVideoDuration: number;
-  projectName: string;
   timelapseSegments: TimelapseSegment[];
   timelineClips: TimelineClip[];
   mediaAssets: MediaAsset[];
-  outputPath?: string;
+  settings: ExportSettings;
 }): Promise<ExportStartResult> {
   if (!isTauri()) {
     throw new Error('MP4 export requires the desktop app');
@@ -124,14 +208,13 @@ export async function startBackgroundExport(params: {
     throw new Error('Upload a main video before exporting');
   }
 
-  const outputPath =
-    params.outputPath ??
-    (await pickExportPath(
-      `${params.projectName.replace(/[^\w\-]+/g, '_') || 'export'}.mp4`
-    ));
+  const outputPath = buildExportOutputPath(
+    params.settings.destinationFolder,
+    params.settings.fileName
+  );
 
   if (!outputPath) {
-    throw new Error('Export cancelled');
+    throw new Error('Invalid export path');
   }
 
   return invoke<ExportStartResult>(

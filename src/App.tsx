@@ -21,11 +21,13 @@ import {
   suggestedProjectName,
 } from './lib/project';
 import { resolveVideoDuration } from './lib/duration';
+import { ExportSettingsModal, type ExportModalPhase } from './components/ExportSettingsModal';
 import {
   cancelBackgroundExport,
   startBackgroundExport,
   subscribeExportComplete,
   subscribeExportProgress,
+  type ExportSettings,
 } from './lib/export';
 import { useVideoDropImport } from './hooks/useVideoDropImport';
 import { PhoneUploadModal } from './components/PhoneUploadModal';
@@ -80,6 +82,8 @@ export default function App() {
   const [saveProjectNameDraft, setSaveProjectNameDraft] = useState('');
   const [saveProcessing, setSaveProcessing] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportModalPhase, setExportModalPhase] = useState<ExportModalPhase>('settings');
 
   const importSessionActive = phoneUploadOpen || pcImportNamingOpen;
 
@@ -108,6 +112,7 @@ export default function App() {
         setExportProgress(null);
         setExportStatusMessage(null);
         setExportOutputPath(null);
+        if (exportModalOpen) setExportModalPhase('settings');
         showStatus(event.message ?? 'Export cancelled');
       }
     })
@@ -123,10 +128,10 @@ export default function App() {
       setExportOutputPath(null);
 
       if (event.status === 'completed') {
-        const durationNote =
-          event.duration > 0 ? ` (${formatShortTime(event.duration)} export length)` : '';
-        showStatus(`Export finished${durationNote} → ${event.outputPath}`);
+        setExportModalPhase('complete');
+        showStatus('Export finished successfully');
       } else if (event.status === 'failed') {
+        if (exportModalOpen) setExportModalPhase('settings');
         showStatus(`Export failed: ${event.message ?? 'Unknown error'}`);
       }
     })
@@ -497,33 +502,43 @@ export default function App() {
     ]
   );
 
-  const handleExportMp4 = async () => {
+  const handleExportMp4 = () => {
     if (!mainVideoPath) {
-      showStatus('Upload a main video before exporting');
+      showStatus('Please import a video first');
+      return;
+    }
+    setExportModalPhase(backgroundExportActive ? 'exporting' : 'settings');
+    setExportModalOpen(true);
+  };
+
+  const handleStartExport = async (settings: ExportSettings) => {
+    if (!mainVideoPath) {
+      showStatus('Please import a video first');
       return;
     }
     if (backgroundExportActive) {
-      showStatus('Export already running in the background — keep editing or cancel it');
+      showStatus('Export already running — check progress in the export window');
+      setExportModalPhase('exporting');
       return;
     }
+
     try {
       const result = await startBackgroundExport({
         mainVideoPath: sourceVideoPath ?? mainVideoPath,
         sourceVideoDuration: sourceVideoDuration || mainVideoDuration,
-        projectName,
         timelapseSegments,
         timelineClips,
         mediaAssets,
+        settings,
       });
       setBackgroundExportActive(true);
       setExportProgress(0);
       setExportOutputPath(result.outputPath);
       setExportStatusMessage('Queued — preview and editing stay available');
-      showStatus(
-        `Export started in background → ${result.outputPath}. You can keep watching and editing.`
-      );
+      setExportModalPhase('exporting');
     } catch (err) {
       showStatus(`Export failed: ${err instanceof Error ? err.message : String(err)}`);
+      setExportModalPhase('settings');
     }
   };
 
@@ -740,21 +755,10 @@ export default function App() {
             type="button"
             className="btn btn-topbar btn-accent"
             onClick={handleExportMp4}
-            disabled={!mainVideoUrl || backgroundExportActive}
             title="Export runs in the background — keep previewing and editing while it encodes"
           >
             {backgroundExportActive ? 'Export running…' : 'Export MP4'}
           </button>
-          {backgroundExportActive && (
-            <button
-              type="button"
-              className="btn btn-topbar"
-              onClick={handleCancelExport}
-              title="Stop background export"
-            >
-              Cancel export
-            </button>
-          )}
         </div>
       </header>
 
@@ -883,6 +887,23 @@ export default function App() {
           }
         }}
         onConfirm={handlePcImportConfirm}
+      />
+
+      <ExportSettingsModal
+        open={exportModalOpen}
+        projectName={projectName}
+        phase={exportModalPhase}
+        progress={exportProgress}
+        statusMessage={exportStatusMessage}
+        outputPath={exportOutputPath}
+        onClose={() => {
+          if (exportModalPhase !== 'exporting') {
+            setExportModalOpen(false);
+            if (exportModalPhase === 'complete') setExportModalPhase('settings');
+          }
+        }}
+        onStartExport={handleStartExport}
+        onCancelExport={handleCancelExport}
       />
 
       <ProjectNamingModal
