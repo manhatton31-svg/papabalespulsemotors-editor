@@ -37,3 +37,8 @@ export type { ContentImportInput };
 export function filterBrollAssets(assets: MediaAsset[]): MediaAsset[] {
   return assetsForCategory(assets, 'broll');
 }
+
+export {
+  toggleBrollFavorite,
+  recordBrollUsage,
+} from './contentLibrary';

@@ -44,7 +44,6 @@ interface TimelineProps {
   onClipMove: (clipId: string, newStartTime: number) => void;
   onSelectClip: (clipId: string | null) => void;
   onPlaceClip: (track: OverlayTrack, assetId: string, startTime: number) => void;
-  onAddClip: () => void;
   timelapseSegments: TimelapseSegment[];
   timelapseModeActive: boolean;
   timelapsePendingStart: number | null;
@@ -71,7 +70,6 @@ export function Timeline({
   onClipMove,
   onSelectClip,
   onPlaceClip,
-  onAddClip,
   timelapseSegments,
   timelapseModeActive,
   timelapsePendingStart,
@@ -618,11 +616,6 @@ export function Timeline({
                 )}
               </span>
             </div>
-          )}
-          {!phase1 && (
-            <button type="button" className="btn btn-sm btn-accent" onClick={onAddClip}>
-              + Add B-Roll at Playhead
-            </button>
           )}
           <button
             type="button"

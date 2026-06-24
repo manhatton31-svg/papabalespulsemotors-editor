@@ -9,21 +9,41 @@
 .broll-toolbar {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
+  gap: 8px;
+  padding: 12px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+}
+
+.broll-insert-btn {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.broll-insert-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.broll-drag-hint {
+  font-size: 10px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  text-align: center;
 }
 
 .broll-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
+  padding: 10px 12px 6px;
   flex-shrink: 0;
 }
 
 .broll-header h3 {
+  margin: 0;
   font-size: 11px;
   font-weight: 600;
   color: var(--text-secondary);
@@ -37,62 +57,83 @@
   font-weight: 600;
 }
 
-.broll-list {
+.broll-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 6px 8px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  padding: 4px 10px 12px;
+}
+
+.broll-section {
+  margin-bottom: 12px;
+}
+
+.broll-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #7d8da3;
+  padding: 6px 4px 8px;
+}
+
+.broll-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .broll-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 24px 12px;
+  gap: 6px;
+  padding: 28px 14px;
   text-align: center;
   color: var(--text-secondary);
   font-size: 12px;
 }
 
 .broll-empty p {
+  margin: 0;
   color: var(--text-primary);
   font-size: 13px;
+  font-weight: 600;
 }
 
-.broll-item {
+.broll-card {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
-  border-radius: var(--radius);
+  flex-direction: column;
+  border-radius: 8px;
   background: var(--bg-elevated);
   border: 1px solid transparent;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  cursor: grab;
+  overflow: hidden;
+  transition: border-color 0.15s, background 0.15s, transform 0.12s;
 }
 
-.broll-item:hover {
+.broll-card:hover {
   background: var(--bg-tertiary);
+  border-color: rgba(45, 212, 191, 0.25);
 }
 
-.broll-item.selected {
+.broll-card.selected {
   border-color: var(--accent);
   background: var(--accent-dim);
+  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.2);
 }
 
-.broll-thumb {
-  width: 52px;
-  height: 36px;
-  border-radius: 4px;
-  overflow: hidden;
-  flex-shrink: 0;
+.broll-card:active {
+  cursor: grabbing;
+}
+
+.broll-card-thumb {
+  position: relative;
+  aspect-ratio: 16 / 10;
   background: #000;
+  overflow: hidden;
 }
 
-.broll-thumb img {
+.broll-card-thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -104,48 +145,80 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: 22px;
   background: var(--bg-primary);
 }
 
-.broll-info {
-  flex: 1;
-  min-width: 0;
+.broll-fav-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #e6edf3;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, transform 0.12s;
+}
+
+.broll-fav-btn:hover {
+  background: rgba(0, 0, 0, 0.75);
+  transform: scale(1.06);
+}
+
+.broll-fav-btn.active {
+  color: #f472b6;
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.broll-card-body {
+  padding: 8px 8px 4px;
+  min-width: 0;
 }
 
 .broll-name {
-  font-size: 12px;
-  font-weight: 500;
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--text-primary);
 }
 
 .broll-duration {
+  display: block;
+  margin-top: 2px;
   font-size: 10px;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
 
-.broll-actions {
+.broll-card-actions {
   display: flex;
-  gap: 2px;
-  flex-shrink: 0;
+  gap: 4px;
+  padding: 0 6px 6px;
 }
 
 .broll-action-btn {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   border-radius: 4px;
   background: transparent;
+  border: none;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 11px;
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
 }
 
 .broll-action-btn:hover {
@@ -165,10 +238,17 @@
 
 .rename-input:focus {
   border-color: var(--accent);
+  outline: none;
 }
 
-.broll-preview-video {
+.broll-preview-video,
+.broll-preview-image {
   width: 100%;
   border-radius: var(--radius);
   background: #000;
+}
+
+.broll-preview-image {
+  max-height: 60vh;
+  object-fit: contain;
 }

@@ -17,6 +17,9 @@ interface LibraryEntry {
   duration: number;
   thumbnail?: string;
   mediaType: MediaType;
+  favorite?: boolean;
+  useCount?: number;
+  lastUsedAt?: number;
 }
 
 interface CategoryLibraryFile {
@@ -77,6 +80,9 @@ function entryToAsset(entry: LibraryEntry): MediaAsset {
     thumbnail: entry.thumbnail,
     url: toAssetUrl(entry.filePath),
     mediaType: entry.mediaType,
+    favorite: entry.favorite,
+    useCount: entry.useCount,
+    lastUsedAt: entry.lastUsedAt,
   };
 }
 
@@ -186,6 +192,9 @@ export async function addToContentLibrary(
       duration: duration > 0 ? duration : (existing?.duration ?? (mediaType === 'image' ? 10 : 0)),
       thumbnail,
       mediaType,
+      favorite: existing?.favorite,
+      useCount: existing?.useCount,
+      lastUsedAt: existing?.lastUsedAt,
     };
 
     if (existing) {
@@ -214,6 +223,27 @@ export async function renameContentAsset(
   library.clips[idx].friendlyName = friendlyName.trim() || 'Untitled';
   await writeCategoryLibrary(category, library);
   return true;
+}
+
+export async function toggleBrollFavorite(id: string): Promise<boolean | null> {
+  const library = await readCategoryLibrary('broll');
+  const idx = library.clips.findIndex((c) => c.id === id);
+  if (idx < 0) return null;
+  const next = !library.clips[idx].favorite;
+  library.clips[idx].favorite = next;
+  await writeCategoryLibrary('broll', library);
+  return next;
+}
+
+export async function recordBrollUsage(id: string): Promise<MediaAsset | null> {
+  const library = await readCategoryLibrary('broll');
+  const idx = library.clips.findIndex((c) => c.id === id);
+  if (idx < 0) return null;
+  const clip = library.clips[idx];
+  clip.useCount = (clip.useCount ?? 0) + 1;
+  clip.lastUsedAt = Date.now();
+  await writeCategoryLibrary('broll', library);
+  return entryToAsset(clip);
 }
 
 export function mergeMediaAssets(existing: MediaAsset[], added: MediaAsset[]): MediaAsset[] {

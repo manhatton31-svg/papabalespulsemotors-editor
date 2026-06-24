@@ -12,6 +12,10 @@ export interface MediaAsset {
   thumbnail?: string;
   url: string;
   mediaType: MediaType;
+  /** B-Roll library metadata */
+  favorite?: boolean;
+  useCount?: number;
+  lastUsedAt?: number;
 }
 
 /** @deprecated Use MediaAsset — kept for backward-compatible imports */

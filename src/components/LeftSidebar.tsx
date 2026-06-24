@@ -24,8 +24,10 @@ interface LeftSidebarProps {
   isGeneratingDiagram: boolean;
   onSelectAsset: (category: LibraryCategory, id: string) => void;
   onRenameAsset: (category: LibraryCategory, id: string, name: string) => void;
+  playheadReady: boolean;
   onImportContent: (category: LibraryCategory) => void;
   onAddAtPlayhead: (category: LibraryCategory) => void;
+  onToggleBrollFavorite: (id: string) => void;
   onToggleTimelapseMode: () => void;
   onTimelapseSpeedChange: (speed: TimelapseSpeed) => void;
   onRemoveTimelapseSegment: (id: string) => void;
@@ -47,8 +49,10 @@ export function LeftSidebar({
   isGeneratingDiagram,
   onSelectAsset,
   onRenameAsset,
+  playheadReady,
   onImportContent,
   onAddAtPlayhead,
+  onToggleBrollFavorite,
   onToggleTimelapseMode,
   onTimelapseSpeedChange,
   onRemoveTimelapseSegment,
@@ -81,9 +85,10 @@ export function LeftSidebar({
           <BRollLibrary
             assets={brollAssets}
             selectedId={selectedAssetIds.broll}
+            playheadReady={playheadReady}
             onSelect={(id) => onSelectAsset('broll', id)}
             onRename={(id, name) => onRenameAsset('broll', id, name)}
-            onImport={() => onImportContent('broll')}
+            onToggleFavorite={onToggleBrollFavorite}
             onAddAtPlayhead={() => onAddAtPlayhead('broll')}
           />
         )}

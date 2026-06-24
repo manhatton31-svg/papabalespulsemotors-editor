@@ -8,7 +8,9 @@ import {
   addToContentLibrary,
   loadAllContentLibraries,
   mergeMediaAssets,
+  recordBrollUsage,
   renameContentAsset,
+  toggleBrollFavorite,
 } from './lib/contentLibrary';
 import { generateDiagramFromVideo } from './lib/diagramGenerate';
 import {
@@ -64,6 +66,7 @@ export default function App() {
   const [selectedAssetIds, setSelectedAssetIds] = useState(emptySelectedAssetIds());
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [playhead, setPlayhead] = useState(0);
+  const [playheadEngaged, setPlayheadEngaged] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [leftPanel, setLeftPanel] = useState<LeftPanel>('broll');
   const [rightPanel, setRightPanel] = useState<RightPanel>('voiceover');
@@ -192,6 +195,7 @@ export default function App() {
     setTimelapsePendingStart(null);
     setTimelapseModeActive(false);
     setPlayhead(0);
+    setPlayheadEngaged(false);
     setIsPlaying(false);
     setSelectedClipId(null);
 
@@ -356,9 +360,29 @@ export default function App() {
       setTimelineClips((prev) => [...prev, clip]);
       setSelectedClipId(clip.id);
       showStatus(`Placed "${asset.friendlyName}" on timeline`);
+
+      if (track === 'broll') {
+        recordBrollUsage(assetId)
+          .then((updated) => {
+            if (updated) {
+              setMediaAssets((prev) =>
+                prev.map((a) => (a.id === updated.id ? { ...a, ...updated } : a))
+              );
+            }
+          })
+          .catch(() => {});
+      }
     },
     [mediaAssets]
   );
+
+  const handleToggleBrollFavorite = useCallback(async (id: string) => {
+    const next = await toggleBrollFavorite(id);
+    if (next === null) return;
+    setMediaAssets((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, favorite: next } : a))
+    );
+  }, []);
 
   const handleAddAtPlayhead = (category: LibraryCategory) => {
     const selectedId = selectedAssetIds[category];
@@ -405,6 +429,7 @@ export default function App() {
 
   const handleTimelapseClick = useCallback(
     (time: number) => {
+      setPlayheadEngaged(true);
       if (timelapsePendingStart === null) {
         setTimelapsePendingStart(time);
         setPlayhead(time);
@@ -453,12 +478,14 @@ export default function App() {
   }, []);
 
   const handlePlayheadSeek = useCallback((time: number) => {
+    setPlayheadEngaged(true);
     setPlayhead(time);
   }, []);
 
   const handleSeekAndPlay = useCallback(
     (time: number) => {
       if (timelapseModeActive) return;
+      setPlayheadEngaged(true);
       setPlayhead(time);
       if (mainVideoUrl) setIsPlaying(true);
     },
@@ -698,6 +725,7 @@ export default function App() {
       setSelectedAssetIds(state.selectedAssetIds);
       setSelectedClipId(null);
       setPlayhead(0);
+      setPlayheadEngaged(false);
       setIsPlaying(false);
     },
     []
@@ -795,8 +823,10 @@ export default function App() {
           isGeneratingDiagram={isGeneratingDiagram}
           onSelectAsset={handleSelectAsset}
           onRenameAsset={handleRenameAsset}
+          playheadReady={playheadEngaged && !!mainVideoUrl}
           onImportContent={handleImportContent}
           onAddAtPlayhead={handleAddAtPlayhead}
+          onToggleBrollFavorite={handleToggleBrollFavorite}
           onToggleTimelapseMode={handleToggleTimelapseMode}
           onTimelapseSpeedChange={setTimelapseSpeed}
           onRemoveTimelapseSegment={(id) =>
@@ -857,7 +887,6 @@ export default function App() {
           onClipMove={handleClipMove}
           onSelectClip={handleSelectClip}
           onPlaceClip={placeClipOnTrack}
-          onAddClip={() => handleAddAtPlayhead('broll')}
           timelapseSegments={timelapseSegments}
           timelapseModeActive={timelapseModeActive}
           timelapsePendingStart={timelapsePendingStart}
