@@ -611,40 +611,50 @@ export default function App() {
     }
   };
 
-  const handleOpenProject = async () => {
-    try {
-      const result = await openProjectFile();
-      if (!result) return;
+  const closeImportAndSaveModals = useCallback(() => {
+    setPhoneUploadOpen(false);
+    setPcImportNamingOpen(false);
+    setPcImportClips([]);
+    setPcImportError(null);
+    setSaveNamingOpen(false);
+    setSaveError(null);
+  }, []);
 
-      let hydrated = await hydrateProject(result.project);
+  const applyHydratedProject = useCallback(
+    async (
+      hydrated: Awaited<ReturnType<typeof hydrateProject>>,
+      filePath: string
+    ) => {
+      let state = hydrated;
 
-      if (hydrated.mainVideoPath && hydrated.mainVideoUrl) {
-        const probed = await resolveVideoDuration(hydrated.mainVideoPath, hydrated.mainVideoUrl);
+      if (state.mainVideoPath && state.mainVideoUrl) {
+        const probed = await resolveVideoDuration(state.mainVideoPath, state.mainVideoUrl);
         if (probed > 0) {
-          hydrated = {
-            ...hydrated,
+          state = {
+            ...state,
             mainVideoDuration: probed,
-            timelineClips: hydrated.timelineClips.map((c) =>
+            timelineClips: state.timelineClips.map((c) =>
               c.track === 'main' ? { ...c, duration: probed } : c
             ),
           };
         }
       }
 
-      setProjectPath(result.filePath);
-      setProjectName(hydrated.projectName);
-      setSourceVideoPath(hydrated.mainVideoPath);
-      setMainVideoPath(hydrated.mainVideoPath);
-      setMainVideoUrl(hydrated.mainVideoUrl);
-      setSourceVideoDuration(hydrated.mainVideoDuration);
-      setMainVideoDuration(hydrated.mainVideoDuration);
-      setTimelapseSegments(hydrated.timelapseSegments);
+      setProjectPath(filePath);
+      setProjectName(state.projectName);
+      setSourceVideoPath(state.mainVideoPath);
+      setMainVideoPath(state.mainVideoPath);
+      setMainVideoUrl(state.mainVideoUrl);
+      setSourceVideoDuration(state.mainVideoDuration);
+      setMainVideoDuration(state.mainVideoDuration);
+      setTimelapseSegments(state.timelapseSegments);
       setTimelapseModeActive(false);
       setTimelapsePendingStart(null);
+      setLeftPanel('broll');
 
-      if (hydrated.mediaAssets.length > 0) {
-        const byCategory = new Map<LibraryCategory, typeof hydrated.mediaAssets>();
-        for (const asset of hydrated.mediaAssets) {
+      if (state.mediaAssets.length > 0) {
+        const byCategory = new Map<LibraryCategory, typeof state.mediaAssets>();
+        for (const asset of state.mediaAssets) {
           const list = byCategory.get(asset.category) ?? [];
           list.push(asset);
           byCategory.set(asset.category, list);
@@ -669,12 +679,25 @@ export default function App() {
         setMediaAssets(await loadAllContentLibraries());
       }
 
-      setTimelineClips(hydrated.timelineClips);
-      setSelectedAssetIds(hydrated.selectedAssetIds);
+      setTimelineClips(state.timelineClips);
+      setSelectedAssetIds(state.selectedAssetIds);
       setSelectedClipId(null);
       setPlayhead(0);
       setIsPlaying(false);
-      showStatus('Project loaded');
+    },
+    []
+  );
+
+  const handleOpenProject = async () => {
+    try {
+      const result = await openProjectFile();
+      if (!result) return;
+
+      closeImportAndSaveModals();
+
+      const hydrated = await hydrateProject(result.project);
+      await applyHydratedProject(hydrated, result.filePath);
+      showStatus('Project loaded successfully');
     } catch (err) {
       showStatus(`Open failed: ${err instanceof Error ? err.message : String(err)}`);
     }

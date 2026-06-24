@@ -211,15 +211,34 @@ export async function saveProjectToPath(project: PulseProject, filePath: string)
 }
 
 export async function openProjectFile(): Promise<{ project: AnyPulseProject; filePath: string } | null> {
+  let defaultPath: string | undefined;
+  try {
+    defaultPath = await getProjectsDir();
+  } catch {
+    defaultPath = undefined;
+  }
+
   const path = await open({
     title: 'Open Project',
     multiple: false,
     directory: false,
+    defaultPath,
     filters: [PROJECT_FILTER],
   });
   if (!path || Array.isArray(path)) return null;
+
   const content = await readTextFile(path);
-  const project = JSON.parse(content) as AnyPulseProject;
+  let project: AnyPulseProject;
+  try {
+    project = JSON.parse(content) as AnyPulseProject;
+  } catch {
+    throw new Error('Invalid project file — could not parse .pulseproj');
+  }
+
+  if (!project || typeof project !== 'object') {
+    throw new Error('Invalid project file — missing project data');
+  }
+
   return { project, filePath: path };
 }
 
