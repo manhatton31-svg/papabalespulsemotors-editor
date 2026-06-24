@@ -37,9 +37,16 @@ import {
   type ExportSettings,
 } from './lib/export';
 import { useVideoDropImport } from './hooks/useVideoDropImport';
+import { ImportProgressBanner } from './components/ImportProgressBanner';
 import { PhoneUploadModal } from './components/PhoneUploadModal';
 import { ProjectNamingModal } from './components/ProjectNamingModal';
-import { completeClipImportSession, type ImportClipRef } from './lib/importSession';
+import {
+  addImportClipsToBroll,
+  resolveMainVideoFromClips,
+  yieldToUi,
+  type ImportClipRef,
+  type ImportProgress,
+} from './lib/importSession';
 import type { PhoneUploadReceivedEvent } from './lib/phoneUpload';
 import { loadMainVideoDirect, openMainVideos, openMediaForCategory } from './lib/video';
 import type { MainVideoSelection } from './lib/video';
@@ -85,8 +92,8 @@ export default function App() {
   const [pcImportNamingOpen, setPcImportNamingOpen] = useState(false);
   const [pcImportClips, setPcImportClips] = useState<ImportClipRef[]>([]);
   const [pcImportProjectName, setPcImportProjectName] = useState('');
-  const [pcImportProcessing, setPcImportProcessing] = useState(false);
   const [pcImportError, setPcImportError] = useState<string | null>(null);
+  const [importPipelineProgress, setImportPipelineProgress] = useState<ImportProgress | null>(null);
   const [saveNamingOpen, setSaveNamingOpen] = useState(false);
   const [saveProjectNameDraft, setSaveProjectNameDraft] = useState('');
   const [saveProcessing, setSaveProcessing] = useState(false);
@@ -248,37 +255,83 @@ export default function App() {
     []
   );
 
-  const applyCompletedImportSession = useCallback(
-    async (result: Awaited<ReturnType<typeof completeClipImportSession>>) => {
-      let assetsAfterBroll: MediaAsset[] = [];
-      setMediaAssets((prev) => {
-        assetsAfterBroll = mergeMediaAssets(prev, result.addedBroll);
-        return assetsAfterBroll;
+  const runClipImportPipeline = useCallback(
+    async (clips: ImportClipRef[], projectName: string) => {
+      const trimmedName = projectName.trim() || 'Untitled Project';
+      const clipCount = clips.length;
+      const isSingleClip = clipCount === 1;
+
+      setProjectName(trimmedName);
+      setIsImportingVideo(true);
+      setImportPipelineProgress({
+        phase: 'preparing',
+        message: isSingleClip ? 'Preparing video…' : 'Preparing clip import…',
+        clipCount,
       });
-      if (result.addedBroll.length > 0) {
-        setSelectedAssetIds((prev) => ({ ...prev, broll: result.addedBroll[0].id }));
-      }
 
-      const mainClip = loadMainVideo(result.mainVideo, { silent: true });
-      setProjectName(result.projectName);
-      setLeftPanel('broll');
+      const onProgress = (progress: ImportProgress) => setImportPipelineProgress(progress);
 
-      const importReadyMessage =
-        result.clipCount === 1
-          ? `Project "${result.projectName}" ready — clip added to B-Roll Library`
-          : `Project "${result.projectName}" ready — ${result.clipCount} clips stitched and added to B-Roll Library`;
-
-      setIsGeneratingHook(true);
       try {
-        const hookAssets = await generateHookPreviewAssets(result.mainVideo.filePath);
-        const defaultIntro = findDefaultIntroAsset(assetsAfterBroll);
-        setMediaAssets((prev) => mergeMediaAssets(prev, hookAssets));
-        applyHookPreviewResult(hookAssets, [mainClip], defaultIntro);
-        showStatus('Hook preview automatically generated and placed at start');
-      } catch {
-        showStatus(importReadyMessage);
+        const mainVideo = await resolveMainVideoFromClips(clips, trimmedName, onProgress);
+        const mainClip = loadMainVideo(mainVideo, { silent: true });
+        setLeftPanel('broll');
+
+        if (isSingleClip) {
+          showStatus('Video loaded. Generating hook preview...');
+        } else {
+          showStatus('Stitch complete. Generating hook preview...');
+        }
+
+        const brollPromise = addImportClipsToBroll(clips, onProgress).catch((err) => {
+          showStatus(
+            `B-Roll library update failed: ${err instanceof Error ? err.message : String(err)}`
+          );
+          return [] as MediaAsset[];
+        });
+
+        onProgress({
+          phase: 'generating-hook',
+          message: 'Generating hook preview…',
+          clipCount,
+        });
+        await yieldToUi();
+
+        let libraryBeforeHook: MediaAsset[] = [];
+        setMediaAssets((prev) => {
+          libraryBeforeHook = prev;
+          return prev;
+        });
+
+        const importReadyMessage = isSingleClip
+          ? `Project "${trimmedName}" ready — clip added to B-Roll Library`
+          : `Project "${trimmedName}" ready — ${clipCount} clips stitched and added to B-Roll Library`;
+
+        setIsGeneratingHook(true);
+        try {
+          const hookAssets = await generateHookPreviewAssets(mainVideo.filePath);
+          const defaultIntro = findDefaultIntroAsset(libraryBeforeHook);
+          setMediaAssets((prev) => mergeMediaAssets(prev, hookAssets));
+          applyHookPreviewResult(hookAssets, [mainClip], defaultIntro);
+          showStatus('Hook preview automatically generated and placed at start');
+        } catch (hookErr) {
+          const hookMessage =
+            hookErr instanceof Error ? hookErr.message : 'Hook preview could not be generated';
+          showStatus(`${hookMessage}. ${importReadyMessage}`);
+        } finally {
+          setIsGeneratingHook(false);
+        }
+
+        const addedBroll = await brollPromise;
+        if (addedBroll.length > 0) {
+          setMediaAssets((prev) => mergeMediaAssets(prev, addedBroll));
+          setSelectedAssetIds((prev) => ({ ...prev, broll: addedBroll[0].id }));
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        showStatus(`Import failed: ${message}`);
       } finally {
-        setIsGeneratingHook(false);
+        setIsImportingVideo(false);
+        setImportPipelineProgress(null);
       }
     },
     [applyHookPreviewResult, loadMainVideo]
@@ -305,29 +358,18 @@ export default function App() {
     }
   };
 
-  const handlePcImportConfirm = async () => {
+  const handlePcImportConfirm = () => {
     const trimmed = pcImportProjectName.trim();
     if (!trimmed) {
       setPcImportError('Enter a project name');
       return;
     }
 
-    setIsImportingVideo(true);
-    setPcImportProcessing(true);
+    const clips = [...pcImportClips];
+    setPcImportNamingOpen(false);
+    setPcImportClips([]);
     setPcImportError(null);
-    try {
-      const result = await completeClipImportSession(pcImportClips, trimmed);
-      await applyCompletedImportSession(result);
-      setPcImportNamingOpen(false);
-      setPcImportClips([]);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      setPcImportError(message);
-      showStatus(`Import failed: ${message}`);
-    } finally {
-      setIsImportingVideo(false);
-      setPcImportProcessing(false);
-    }
+    void runClipImportPipeline(clips, trimmed);
   };
 
   useVideoDropImport(
@@ -337,27 +379,22 @@ export default function App() {
   );
 
   const handlePhoneUploadSessionComplete = useCallback(
-    async (clips: PhoneUploadReceivedEvent[], name: string) => {
+    (clips: PhoneUploadReceivedEvent[], name: string) => {
       if (clips.length === 0) {
-        throw new Error('No clips uploaded');
+        showStatus('Upload at least one video clip');
+        return;
       }
 
-      setIsImportingVideo(true);
-      try {
-        const result = await completeClipImportSession(
-          clips.map((clip) => ({
-            sourcePath: clip.sourcePath,
-            displayName: clip.originalName,
-          })),
-          name
-        );
-        await applyCompletedImportSession(result);
-      } finally {
-        setIsImportingVideo(false);
-        setPhoneUploadOpen(false);
-      }
+      setPhoneUploadOpen(false);
+      void runClipImportPipeline(
+        clips.map((clip) => ({
+          sourcePath: clip.sourcePath,
+          displayName: clip.originalName,
+        })),
+        name
+      );
     },
-    [applyCompletedImportSession]
+    [runClipImportPipeline]
   );
 
   const handleImportContent = async (category: LibraryCategory) => {
@@ -857,6 +894,10 @@ export default function App() {
         </div>
       </header>
 
+      {importPipelineProgress && (
+        <ImportProgressBanner progress={importPipelineProgress} />
+      )}
+
       {backgroundExportActive && (
         <div className="background-export-banner" role="status">
           <span className="background-export-label">
@@ -920,6 +961,7 @@ export default function App() {
             playhead={playhead}
             isPlaying={isPlaying}
             isImporting={isImportingVideo}
+            importStatusMessage={importPipelineProgress?.message ?? null}
             isDragOver={isVideoDragOver}
             onImportClick={handleImportFromPc}
             onPhoneUploadOpen={() => setPhoneUploadOpen(true)}
@@ -974,15 +1016,13 @@ export default function App() {
         open={pcImportNamingOpen}
         clipCount={pcImportClips.length}
         projectName={pcImportProjectName}
-        processing={pcImportProcessing}
+        processing={false}
         error={pcImportError}
         onProjectNameChange={setPcImportProjectName}
         onClose={() => {
-          if (!pcImportProcessing) {
-            setPcImportNamingOpen(false);
-            setPcImportClips([]);
-            setPcImportError(null);
-          }
+          setPcImportNamingOpen(false);
+          setPcImportClips([]);
+          setPcImportError(null);
         }}
         onConfirm={handlePcImportConfirm}
       />

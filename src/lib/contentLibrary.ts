@@ -159,7 +159,8 @@ export interface ContentImportInput {
 
 export async function addToContentLibrary(
   category: LibraryCategory,
-  imports: ContentImportInput[]
+  imports: ContentImportInput[],
+  options?: { skipThumbnails?: boolean }
 ): Promise<MediaAsset[]> {
   const library = await readCategoryLibrary(category);
   const added: MediaAsset[] = [];
@@ -178,7 +179,7 @@ export async function addToContentLibrary(
     }
 
     let thumbnail = imp.thumbnail ?? existing?.thumbnail;
-    if (!thumbnail) {
+    if (!thumbnail && !options?.skipThumbnails) {
       thumbnail =
         mediaType === 'image' ? url : await captureVideoThumbnail(url);
     }

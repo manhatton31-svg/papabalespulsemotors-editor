@@ -52,6 +52,7 @@ interface VideoPreviewProps {
   playhead: number;
   isPlaying: boolean;
   isImporting?: boolean;
+  importStatusMessage?: string | null;
   isDragOver?: boolean;
   onImportClick?: () => void;
   onPhoneUploadOpen?: () => void;
@@ -73,6 +74,7 @@ export function VideoPreview({
   playhead,
   isPlaying,
   isImporting = false,
+  importStatusMessage = null,
   isDragOver = false,
   onImportClick,
   onPhoneUploadOpen,
@@ -1160,10 +1162,14 @@ export function VideoPreview({
         {!mainVideoUrl ? (
           <div className="preview-empty">
             <div className="preview-empty-icon">{isImporting ? '…' : '▶'}</div>
-            <p>{isImporting ? 'Loading video…' : 'Import a video to start editing'}</p>
+            <p>
+              {isImporting
+                ? importStatusMessage ?? 'Loading video…'
+                : 'Import a video to start editing'}
+            </p>
             <span className="preview-empty-hint">
               {isImporting
-                ? 'Using your phone file directly — no conversion'
+                ? 'Processing continues in the background — the editor stays responsive'
                 : 'Same Wi‑Fi: send straight from your phone with the QR code — or import from this PC / drag a file here'}
             </span>
             {!isImporting && (onImportClick || onPhoneUploadOpen) && (

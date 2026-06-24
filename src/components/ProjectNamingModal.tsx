@@ -39,8 +39,8 @@ export function ProjectNamingModal({
   const defaultHint =
     clipCount > 0
       ? clipCount === 1
-        ? 'This clip will become your main video.'
-        : `${clipCount} clips will be stitched with a smooth crossfade between each.`
+        ? 'This clip will become your main video. A hook preview will generate automatically.'
+        : `${clipCount} clips will be stitched with a smooth crossfade between each, then a hook preview will generate automatically.`
       : null;
 
   return (

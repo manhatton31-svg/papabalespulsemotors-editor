@@ -14,7 +14,7 @@ import './PhoneUploadModal.css';
 interface PhoneUploadModalProps {
   open: boolean;
   onClose: () => void;
-  onSessionComplete: (clips: PhoneUploadReceivedEvent[], projectName: string) => Promise<void>;
+  onSessionComplete: (clips: PhoneUploadReceivedEvent[], projectName: string) => void;
 }
 
 export function PhoneUploadModal({ open, onClose, onSessionComplete }: PhoneUploadModalProps) {
@@ -24,13 +24,10 @@ export function PhoneUploadModal({ open, onClose, onSessionComplete }: PhoneUplo
   const [clips, setClips] = useState<PhoneUploadReceivedEvent[]>([]);
   const [namingOpen, setNamingOpen] = useState(false);
   const [projectName, setProjectName] = useState('');
-  const [processing, setProcessing] = useState(false);
-
   const resetSession = useCallback(() => {
     setClips([]);
     setNamingOpen(false);
     setProjectName('');
-    setProcessing(false);
     setError(null);
   }, []);
 
@@ -90,21 +87,16 @@ export function PhoneUploadModal({ open, onClose, onSessionComplete }: PhoneUplo
     setNamingOpen(true);
   };
 
-  const handleConfirmProject = async () => {
+  const handleConfirmProject = () => {
     const trimmed = projectName.trim();
     if (!trimmed) {
       setError('Enter a project name');
       return;
     }
-    setProcessing(true);
     setError(null);
-    try {
-      await onSessionComplete(clips, trimmed);
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      setProcessing(false);
-    }
+    setNamingOpen(false);
+    onSessionComplete(clips, trimmed);
+    onClose();
   };
 
   if (!open) return null;
@@ -118,7 +110,6 @@ export function PhoneUploadModal({ open, onClose, onSessionComplete }: PhoneUplo
             className="phone-upload-modal-close"
             onClick={onClose}
             aria-label="Close"
-            disabled={processing}
           >
             ×
           </button>
@@ -174,7 +165,7 @@ export function PhoneUploadModal({ open, onClose, onSessionComplete }: PhoneUplo
                 type="button"
                 className="btn btn-accent phone-upload-modal-done"
                 onClick={handleDoneUploading}
-                disabled={processing || clips.length === 0}
+                disabled={clips.length === 0}
               >
                 Done Uploading
               </button>
@@ -187,7 +178,10 @@ export function PhoneUploadModal({ open, onClose, onSessionComplete }: PhoneUplo
         open={namingOpen}
         clipCount={clips.length}
         projectName={projectName}
-        processing={processing}
+        processing={false}
+        processingLabel={
+          clips.length === 1 ? 'Loading video…' : 'Stitching clips…'
+        }
         error={namingOpen ? error : null}
         onProjectNameChange={setProjectName}
         onClose={() => setNamingOpen(false)}
