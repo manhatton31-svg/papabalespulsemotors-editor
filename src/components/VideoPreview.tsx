@@ -24,6 +24,10 @@ import {
   getTimelapseSegmentAt,
   sourceTimeToBakedTime,
 } from '../types/timelapse';
+import {
+  globalTimeToMainSource,
+  mainSourceToGlobalTime,
+} from '../lib/timelinePlayback';
 import './VideoPreview.css';
 
 const UI_TICK_INTERVAL_MS = 50;
@@ -44,6 +48,9 @@ interface VideoPreviewProps {
   previewVideoUrl?: string | null;
   useBakedPreview?: boolean;
   mainVideoDuration: number;
+  previewDuration?: number;
+  mainClipOffset?: number;
+  playbackResetKey?: number;
   bakedPreviewDuration?: number;
   exportDuration?: number;
   mediaAssets: MediaAsset[];
@@ -66,6 +73,9 @@ export function VideoPreview({
   previewVideoUrl,
   useBakedPreview = false,
   mainVideoDuration,
+  previewDuration,
+  mainClipOffset = 0,
+  playbackResetKey = 0,
   bakedPreviewDuration = 0,
   exportDuration,
   mediaAssets,
@@ -86,6 +96,8 @@ export function VideoPreview({
   const overlayRef = useRef<HTMLVideoElement>(null);
   const diagramVideoRef = useRef<HTMLVideoElement>(null);
   const playheadRef = useRef(playhead);
+  const mainClipOffsetRef = useRef(mainClipOffset);
+  const previewDurationRef = useRef(previewDuration ?? mainVideoDuration);
   const isPlayingRef = useRef(isPlaying);
   const lastSyncedPlayheadRef = useRef(-1);
   const timelapseSegmentsRef = useRef(timelapseSegments);
@@ -135,7 +147,10 @@ export function VideoPreview({
   timelapseSegmentsRef.current = timelapseSegments;
   timelineClipsRef.current = timelineClips;
   mediaAssetsRef.current = mediaAssets;
-  durationRef.current = mainVideoDuration;
+  mainClipOffsetRef.current = mainClipOffset;
+  previewDurationRef.current =
+    previewDuration && previewDuration > 0 ? previewDuration : mainVideoDuration;
+  durationRef.current = previewDurationRef.current;
   useBakedPreviewRef.current = useBakedPreview;
 
   const activePreviewUrl = previewVideoUrl ?? mainVideoUrl;
@@ -145,7 +160,15 @@ export function VideoPreview({
   }, []);
 
   const mapBakedToSource = useCallback((bakedTime: number) => {
-    return bakedTimeToSourceTime(bakedTime, timelapseSegmentsRef.current, durationRef.current);
+    return bakedTimeToSourceTime(bakedTime, timelapseSegmentsRef.current, mainVideoDuration);
+  }, [mainVideoDuration]);
+
+  const toMainSource = useCallback((globalTime: number) => {
+    return globalTimeToMainSource(globalTime, mainClipOffsetRef.current);
+  }, []);
+
+  const toGlobalTime = useCallback((sourceTime: number) => {
+    return mainSourceToGlobalTime(sourceTime, mainClipOffsetRef.current);
   }, []);
 
   const activeFullFrame = getActiveFullFrameAt(playhead, timelineClips, mediaAssets);
@@ -397,9 +420,13 @@ export function VideoPreview({
     return logicalTime >= durationRef.current - END_TOLERANCE_SECONDS;
   }, []);
 
-  const isInTimelapseAt = useCallback((sourceTime: number) => {
-    return getPlaybackRateAt(sourceTime, timelapseSegmentsRef.current) > 1;
-  }, []);
+  const isInTimelapseAt = useCallback(
+    (globalTime: number) => {
+      const sourceTime = globalTimeToMainSource(globalTime, mainClipOffsetRef.current);
+      return getPlaybackRateAt(sourceTime, timelapseSegmentsRef.current) > 1;
+    },
+    []
+  );
 
   /** After a false `ended`, currentTime is unreliable — use the last known playhead. */
   const resumeAfterFalseEnded = useCallback(
@@ -411,7 +438,7 @@ export function VideoPreview({
       const logical = playheadRef.current;
       if (isNearTrueEnd(logical)) return false;
 
-      const rate = getPlaybackRateAt(logical, timelapseSegmentsRef.current);
+      const rate = getPlaybackRateAt(toMainSource(logical), timelapseSegmentsRef.current);
       let resumeAt = Math.min(
         logical + frameNudgeAtRate(Math.max(rate, 1)),
         durationRef.current - 0.033
@@ -552,24 +579,26 @@ export function VideoPreview({
   );
 
   const resumeMainAfterOverlay = useCallback(
-    (time: number) => {
+    (globalTime: number) => {
       const main = mainRef.current;
       if (!main) return;
 
+      const sourceTime = toMainSource(globalTime);
+
       clearOverlayPlayback();
-      prevVideoTimeRef.current = time;
-      lastVideoAdvanceTRef.current = time;
+      prevVideoTimeRef.current = globalTime;
+      lastVideoAdvanceTRef.current = globalTime;
       lastVideoAdvanceMsRef.current = performance.now();
 
       if (useBakedPreviewRef.current) {
-        seekVideo(main, mapSourceToBaked(time));
+        seekVideo(main, mapSourceToBaked(sourceTime));
         ensureMainRateOne(main);
       } else {
         clearUltraRefs();
-        if (Math.abs(main.currentTime - time) > 0.08) {
-          seekVideo(main, time);
+        if (Math.abs(main.currentTime - sourceTime) > 0.08) {
+          seekVideo(main, sourceTime);
         }
-        forceSyncPlaybackRate(main, time);
+        forceSyncPlaybackRate(main, sourceTime);
       }
       main.play().catch(() => {});
     },
@@ -580,27 +609,30 @@ export function VideoPreview({
       mapSourceToBaked,
       ensureMainRateOne,
       clearUltraRefs,
+      toMainSource,
     ]
   );
 
   const startMainPlayback = useCallback(
-    (time: number) => {
+    (globalTime: number) => {
       const main = mainRef.current;
       if (!main) return;
+
+      const sourceTime = toMainSource(globalTime);
 
       clearOverlayPlayback();
       clearUltraRefs();
       activePlaybackKeyRef.current = '';
-      prevVideoTimeRef.current = time;
-      lastVideoAdvanceTRef.current = time;
+      prevVideoTimeRef.current = globalTime;
+      lastVideoAdvanceTRef.current = globalTime;
       lastVideoAdvanceMsRef.current = performance.now();
 
       if (useBakedPreviewRef.current) {
-        seekVideo(main, mapSourceToBaked(time));
+        seekVideo(main, mapSourceToBaked(sourceTime));
         ensureMainRateOne(main);
       } else {
-        seekVideo(main, time);
-        forceSyncPlaybackRate(main, time);
+        seekVideo(main, sourceTime);
+        forceSyncPlaybackRate(main, sourceTime);
       }
       main.play().catch(() => {});
     },
@@ -611,11 +643,12 @@ export function VideoPreview({
       mapSourceToBaked,
       ensureMainRateOne,
       clearUltraRefs,
+      toMainSource,
     ]
   );
 
   const syncPausedToPlayhead = useCallback(
-    (time: number) => {
+    (globalTime: number) => {
       const main = mainRef.current;
       if (!main || !mainVideoUrl) return;
 
@@ -623,7 +656,8 @@ export function VideoPreview({
       activePlaybackKeyRef.current = '';
       clearUltraRefs();
 
-      const t = clampTime(time, mainVideoDuration || main.duration || 0);
+      const t = clampTime(globalTime, previewDurationRef.current || main.duration || 0);
+      const sourceTime = toMainSource(t);
       const fullFrame = getActiveFullFrameAt(
         t,
         timelineClipsRef.current,
@@ -642,18 +676,18 @@ export function VideoPreview({
           syncOverlayElement(t, fullFrame);
         }
         if (useBakedPreviewRef.current) {
-          seekVideo(main, mapSourceToBaked(t));
+          seekVideo(main, mapSourceToBaked(sourceTime));
         } else {
-          seekVideo(main, t);
+          seekVideo(main, sourceTime);
         }
         ensureMainRateOne(main);
         main.pause();
       } else if (useBakedPreviewRef.current) {
-        seekVideo(main, mapSourceToBaked(t));
+        seekVideo(main, mapSourceToBaked(sourceTime));
         ensureMainRateOne(main);
       } else {
-        seekVideo(main, t);
-        forceSyncPlaybackRate(main, t);
+        seekVideo(main, sourceTime);
+        forceSyncPlaybackRate(main, sourceTime);
       }
 
       prevVideoTimeRef.current = t;
@@ -662,7 +696,6 @@ export function VideoPreview({
     },
     [
       mainVideoUrl,
-      mainVideoDuration,
       syncOverlayElement,
       seekVideo,
       forceSyncPlaybackRate,
@@ -670,15 +703,16 @@ export function VideoPreview({
       ensureMainRateOne,
       clearOverlayPlayback,
       mapSourceToBaked,
+      toMainSource,
     ]
   );
 
   const seekDuringPlayback = useCallback(
-    (time: number) => {
+    (globalTime: number) => {
       const main = mainRef.current;
       if (!main) return;
 
-      const t = clampTime(time, mainVideoDuration || main.duration || 0);
+      const t = clampTime(globalTime, previewDurationRef.current || main.duration || 0);
       const fullFrame = getActiveFullFrameAt(
         t,
         timelineClipsRef.current,
@@ -699,13 +733,7 @@ export function VideoPreview({
       syncDiagramElement(t, true, true);
       lastSyncedPlayheadRef.current = t;
     },
-    [
-      mainVideoDuration,
-      handoffToOverlay,
-      startMainPlayback,
-      syncDiagramElement,
-      clearOverlayPlayback,
-    ]
+    [handoffToOverlay, startMainPlayback, syncDiagramElement, clearOverlayPlayback]
   );
 
   const checkStall = useCallback(
@@ -758,29 +786,31 @@ export function VideoPreview({
       if (!main || overlayPlaybackRef.current) return;
 
       const sourceT = mapBakedToSource(bakedT);
+      const globalT = toGlobalTime(sourceT);
       resumeMainIfNeeded(main);
-      prevVideoTimeRef.current = sourceT;
+      prevVideoTimeRef.current = globalT;
 
       const fullFrame = getActiveFullFrameAt(
-        sourceT,
+        globalT,
         timelineClipsRef.current,
         mediaAssetsRef.current
       );
 
       if (fullFrame && fullFrame.asset.mediaType === 'video') {
-        handoffToOverlay(sourceT, fullFrame);
+        handoffToOverlay(globalT, fullFrame);
         return;
       }
 
-      publishPlayhead(sourceT, false, false);
-      syncDiagramElement(sourceT, true);
+      publishPlayhead(globalT, false, false);
+      syncDiagramElement(globalT, true);
 
-      if (isNearTrueEnd(sourceT)) {
+      if (isNearTrueEnd(globalT)) {
         onEnded();
       }
     },
     [
       mapBakedToSource,
+      toGlobalTime,
       resumeMainIfNeeded,
       handoffToOverlay,
       publishPlayhead,
@@ -802,7 +832,8 @@ export function VideoPreview({
       return;
     }
 
-    const logical = Math.max(t, playheadRef.current);
+    const globalFromMain = toGlobalTime(t);
+    const logical = Math.max(globalFromMain, playheadRef.current);
     const activeKey = activePlaybackKeyRef.current;
     const inTimelapse =
       isInTimelapseAt(logical) ||
@@ -853,10 +884,11 @@ export function VideoPreview({
     handoffToOverlay,
     onEnded,
     isNearTrueEnd,
+    toGlobalTime,
   ]);
 
   const tickMain = useCallback(
-    (t: number) => {
+    (sourceT: number) => {
       const main = mainRef.current;
       if (!main || overlayPlaybackRef.current) return;
 
@@ -865,15 +897,16 @@ export function VideoPreview({
         return;
       }
 
-      const logical = Math.max(t, playheadRef.current);
+      const globalT = toGlobalTime(sourceT);
+      const logical = Math.max(globalT, playheadRef.current);
       if (isInTimelapseAt(logical)) return;
 
       const now = performance.now();
       const prevT = prevVideoTimeRef.current;
 
-      syncPlaybackRate(main, logical);
-      handleSegmentBoundary(main, prevT, t);
-      checkStall(main, t, now);
+      syncPlaybackRate(main, toMainSource(logical));
+      handleSegmentBoundary(main, toMainSource(prevT), sourceT);
+      checkStall(main, sourceT, now);
       resumeMainIfNeeded(main);
 
       const fullFrame = getActiveFullFrameAt(
@@ -884,15 +917,15 @@ export function VideoPreview({
 
       if (fullFrame && fullFrame.asset.mediaType === 'video') {
         handoffToOverlay(logical, fullFrame);
-        prevVideoTimeRef.current = t;
+        prevVideoTimeRef.current = logical;
         return;
       }
 
-      prevVideoTimeRef.current = t;
-      publishPlayhead(t, false, false);
-      syncDiagramElement(t, true);
+      prevVideoTimeRef.current = logical;
+      publishPlayhead(logical, false, false);
+      syncDiagramElement(logical, true);
 
-      if (isNearTrueEnd(t) && isNearTrueEnd(playheadRef.current)) {
+      if (isNearTrueEnd(logical) && isNearTrueEnd(playheadRef.current)) {
         onEnded();
       }
     },
@@ -908,6 +941,8 @@ export function VideoPreview({
       handleSegmentBoundary,
       tickMainBaked,
       isInTimelapseAt,
+      toGlobalTime,
+      toMainSource,
     ]
   );
 
@@ -955,21 +990,30 @@ export function VideoPreview({
   maintainPlaybackRef.current = maintainPlayback;
 
   const resolveMainSeekTime = useCallback(
-    (sourceTime: number) => {
+    (globalTime: number) => {
+      const sourceTime = toMainSource(globalTime);
       return useBakedPreviewRef.current ? mapSourceToBaked(sourceTime) : sourceTime;
     },
-    [mapSourceToBaked]
+    [mapSourceToBaked, toMainSource]
   );
+
+  useEffect(() => {
+    if (playbackResetKey <= 0) return;
+    playheadRef.current = 0;
+    lastSyncedPlayheadRef.current = 0;
+    syncPausedToPlayheadRef.current(0);
+  }, [playbackResetKey]);
 
   useEffect(() => {
     const main = mainRef.current;
     if (!main || !activePreviewUrl) return;
 
-    const sourceT = playheadRef.current;
-    const bakedT = resolveMainSeekTime(sourceT);
-    prevVideoTimeRef.current = sourceT;
-    lastVideoAdvanceTRef.current = sourceT;
-    lastSyncedPlayheadRef.current = sourceT;
+    const globalT = playheadRef.current;
+    const bakedT = resolveMainSeekTime(globalT);
+    const sourceT = toMainSource(globalT);
+    prevVideoTimeRef.current = globalT;
+    lastVideoAdvanceTRef.current = globalT;
+    lastSyncedPlayheadRef.current = globalT;
     if (useBakedPreviewRef.current) {
       activePlaybackKeyRef.current = 'baked';
       clearUltraRefs();
@@ -981,7 +1025,10 @@ export function VideoPreview({
 
     const syncAfterLoad = () => {
       seekVideo(main, bakedT);
-      if (!useBakedPreviewRef.current && getPlaybackRateAt(sourceT, timelapseSegmentsRef.current) > 1) {
+      if (
+        !useBakedPreviewRef.current &&
+        getPlaybackRateAt(sourceT, timelapseSegmentsRef.current) > 1
+      ) {
         forceSyncPlaybackRate(main, sourceT);
       }
       if (isPlayingRef.current && !overlayPlaybackRef.current) {
@@ -1010,6 +1057,7 @@ export function VideoPreview({
     ensureMainRateOne,
     clearUltraRefs,
     forceSyncPlaybackRate,
+    toMainSource,
   ]);
 
   useEffect(() => {
@@ -1145,7 +1193,7 @@ export function VideoPreview({
       <div className="preview-header">
         <span className="preview-label">{previewLabel}</span>
         <span className="preview-time">
-          {formatTime(playhead)} / {formatTime(mainVideoDuration)}
+          {formatTime(playhead)} / {formatTime(previewDuration ?? mainVideoDuration)}
           {exportDuration &&
             exportDuration > 0 &&
             Math.abs(exportDuration - mainVideoDuration) > 0.5 && (

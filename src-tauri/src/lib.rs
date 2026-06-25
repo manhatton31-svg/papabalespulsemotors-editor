@@ -1784,6 +1784,42 @@ fn source_to_output_time(source_time: f64, parts: &[TimelinePart]) -> f64 {
     output
 }
 
+fn timeline_to_output_time(
+    timeline_time: f64,
+    main_timeline_start: f64,
+    lead_in_duration: f64,
+    parts: &[TimelinePart],
+) -> f64 {
+    if timeline_time < main_timeline_start - 0.001 {
+        return timeline_time;
+    }
+    let source_time = (timeline_time - main_timeline_start).max(0.0);
+    lead_in_duration + source_to_output_time(source_time, parts)
+}
+
+fn append_lead_in_video_pad(filter: &mut String, lead_in: f64, input_label: &str) -> String {
+    if lead_in <= 0.001 {
+        return input_label.to_string();
+    }
+    let padded = format!("{input_label}padded");
+    filter.push_str(&format!(
+        "[{input_label}]tpad=start_duration={lead_in:.4}:start_mode=add:color=black[{padded}];"
+    ));
+    padded
+}
+
+fn append_lead_in_audio_pad(filter: &mut String, lead_in: f64, input_label: &str) -> String {
+    if lead_in <= 0.001 {
+        return input_label.to_string();
+    }
+    let delay_ms = (lead_in * 1000.0).round() as i64;
+    let padded = format!("{input_label}padded");
+    filter.push_str(&format!(
+        "[{input_label}]adelay={delay_ms}|{delay_ms}[{padded}];"
+    ));
+    padded
+}
+
 fn overlay_track_priority(track: &str) -> i32 {
     match track {
         "intro" => 3,
@@ -1824,10 +1860,14 @@ fn build_export_filter(
     overlays: &[OverlayClipInput],
     include_audio: bool,
     settings: &ExportSettingsInput,
+    lead_in_duration: f64,
+    main_timeline_start: f64,
 ) -> String {
     let mut filter = build_video_filter(parts);
+    let mut current_video = append_lead_in_video_pad(&mut filter, lead_in_duration, "basev");
     if include_audio {
         filter.push_str(&build_audio_base_filter(parts));
+        append_lead_in_audio_pad(&mut filter, lead_in_duration, "basea");
     }
 
     let mut sorted: Vec<&OverlayClipInput> = overlays.iter().collect();
@@ -1840,7 +1880,6 @@ fn build_export_filter(
             })
     });
 
-    let mut current_video = "basev".to_string();
     for (i, clip) in sorted.iter().enumerate() {
         let input_idx = i + 1;
         let prep = format!("ovprep{i}");
@@ -1848,8 +1887,18 @@ fn build_export_filter(
         let base_ref = format!("bvr{i}");
         let out = format!("xv{i}");
 
-        let out_start = source_to_output_time(clip.start_time, parts);
-        let out_end = source_to_output_time(clip.start_time + clip.duration, parts);
+        let out_start = timeline_to_output_time(
+            clip.start_time,
+            main_timeline_start,
+            lead_in_duration,
+            parts,
+        );
+        let out_end = timeline_to_output_time(
+            clip.start_time + clip.duration,
+            main_timeline_start,
+            lead_in_duration,
+            parts,
+        );
 
         if clip.is_image {
             filter.push_str(&format!(
@@ -2031,6 +2080,8 @@ fn build_overlay_filter_on_base(
     parts: &[TimelinePart],
     overlay_input_start: usize,
     settings: &ExportSettingsInput,
+    lead_in_duration: f64,
+    main_timeline_start: f64,
 ) -> String {
     let mut filter = String::new();
     let mut sorted: Vec<&OverlayClipInput> = overlays.iter().collect();
@@ -2053,8 +2104,18 @@ fn build_overlay_filter_on_base(
         let base_ref = format!("bvr{i}");
         let out = format!("xv{i}");
 
-        let out_start = source_to_output_time(clip.start_time, parts);
-        let out_end = source_to_output_time(clip.start_time + clip.duration, parts);
+        let out_start = timeline_to_output_time(
+            clip.start_time,
+            main_timeline_start,
+            lead_in_duration,
+            parts,
+        );
+        let out_end = timeline_to_output_time(
+            clip.start_time + clip.duration,
+            main_timeline_start,
+            lead_in_duration,
+            parts,
+        );
 
         if clip.is_image {
             filter.push_str(&format!(
@@ -2080,6 +2141,14 @@ fn build_overlay_filter_on_base(
 
     append_final_video_output(&mut filter, &current_video, settings);
     filter
+}
+
+fn export_audio_map_label(lead_in_duration: f64) -> &'static str {
+    if lead_in_duration > 0.001 {
+        "baseapadded"
+    } else {
+        "basea"
+    }
 }
 
 fn export_stream_copy(
@@ -2340,6 +2409,8 @@ fn export_with_filter_graph(
     out_duration: f64,
     export_start: Instant,
     settings: &ExportSettingsInput,
+    lead_in_duration: f64,
+    main_timeline_start: f64,
 ) -> Result<(), String> {
     let thread_limit = ffmpeg_thread_limit_export();
     let filter = if base_input.is_some() {
@@ -2351,6 +2422,8 @@ fn export_with_filter_graph(
                 parts,
                 overlay_input_start,
                 settings,
+                lead_in_duration,
+                main_timeline_start,
             ));
         } else {
             let mut base_only = String::from("[0:v]setpts=PTS-STARTPTS[basev];");
@@ -2362,7 +2435,14 @@ fn export_with_filter_graph(
         }
         filter
     } else {
-        build_export_filter(parts, overlay_clips, include_audio, settings)
+        build_export_filter(
+            parts,
+            overlay_clips,
+            include_audio,
+            settings,
+            lead_in_duration,
+            main_timeline_start,
+        )
     };
 
     let mut args: Vec<String> = vec![
@@ -2403,7 +2483,7 @@ fn export_with_filter_graph(
     args.push("[outv]".into());
     if include_audio {
         args.push("-map".into());
-        args.push("[basea]".into());
+        args.push(format!("[{}]", export_audio_map_label(lead_in_duration)));
         args.push("-c:a".into());
         args.push("aac".into());
         args.push("-b:a".into());
@@ -2472,6 +2552,8 @@ fn export_mp4_sync(
     overlay_clips: Vec<OverlayClipInput>,
     source_duration: Option<f64>,
     export_settings: ExportSettingsInput,
+    lead_in_duration: Option<f64>,
+    main_timeline_start: Option<f64>,
 ) -> Result<ExportMp4Result, String> {
     if main_path.is_empty() {
         return Err("No main video loaded".into());
@@ -2508,7 +2590,9 @@ fn export_mp4_sync(
         return Err("No valid timeline to export".into());
     }
 
-    let out_duration = output_duration(&parts);
+    let lead_in = lead_in_duration.unwrap_or(0.0).max(0.0);
+    let main_start = main_timeline_start.unwrap_or(0.0).max(0.0);
+    let out_duration = lead_in + output_duration(&parts);
     let include_audio = has_audio_stream(&main_path);
     let start = Instant::now();
     let temp_output = temp_export_path(&output_path);
@@ -2517,8 +2601,10 @@ fn export_mp4_sync(
     emit_export_progress(&app, job_id, 0.0, 0, "running", Some("Starting background export"));
 
     let export_result = (|| {
-        let can_stream_copy =
-            !has_timelapse_parts(&parts) && overlay_clips.is_empty() && !needs_video_reencode(&export_settings);
+        let can_stream_copy = lead_in <= 0.001
+            && !has_timelapse_parts(&parts)
+            && overlay_clips.is_empty()
+            && !needs_video_reencode(&export_settings);
 
         if can_stream_copy {
             check_export_cancel(cancel)?;
@@ -2549,6 +2635,8 @@ fn export_mp4_sync(
                 out_duration,
                 start,
                 &export_settings,
+                lead_in,
+                main_start,
             )?;
         } else {
             check_export_cancel(cancel)?;
@@ -2565,6 +2653,8 @@ fn export_mp4_sync(
                 out_duration,
                 start,
                 &export_settings,
+                lead_in,
+                main_start,
             )?;
         }
 
@@ -2601,6 +2691,8 @@ fn start_export_mp4(
     timelapse_segments: Vec<TimelapseSegmentInput>,
     overlay_clips: Vec<OverlayClipInput>,
     source_duration: Option<f64>,
+    lead_in_duration: Option<f64>,
+    main_timeline_start: Option<f64>,
     export_settings: Option<ExportSettingsInput>,
 ) -> Result<ExportStartResult, String> {
     if main_path.is_empty() {
@@ -2649,6 +2741,8 @@ fn start_export_mp4(
             overlay_clips,
             source_duration,
             settings,
+            lead_in_duration,
+            main_timeline_start,
         );
 
         if let Ok(mut state) = shared.lock() {

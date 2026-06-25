@@ -83,7 +83,16 @@ export function buildHookTimelineClips(
       duration: defaultIntroAsset.duration,
       track: 'intro',
     });
+    cursor += defaultIntroAsset.duration;
   }
 
-  return [...introClips, ...withoutIntros];
+  const mainOffset = cursor;
+  const shiftedOthers = withoutIntros.map((clip) => {
+    if (clip.track === 'main') {
+      return { ...clip, startTime: mainOffset };
+    }
+    return clip;
+  });
+
+  return [...introClips, ...shiftedOthers];
 }

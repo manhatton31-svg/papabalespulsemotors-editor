@@ -5,6 +5,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import type { OverlayTrack } from '../types/content';
 import type { MediaAsset, TimelineClip } from '../types/project';
 import type { TimelapseSegment } from '../types/timelapse';
+import { getMainClipOffset } from './timelinePlayback';
 import { getAppDataDir } from './tauriFs';
 import { sanitizeProjectFileName } from './project';
 
@@ -174,6 +175,8 @@ function buildExportInvokeArgs(params: {
     ? params.timelapseSegments
     : [];
 
+  const mainTimelineStart = getMainClipOffset(params.timelineClips);
+
   return {
     mainPath: params.mainVideoPath,
     outputPath: params.outputPath,
@@ -185,6 +188,8 @@ function buildExportInvokeArgs(params: {
     overlayClips,
     sourceDuration:
       params.sourceVideoDuration > 0 ? params.sourceVideoDuration : undefined,
+    leadInDuration: mainTimelineStart > 0 ? mainTimelineStart : undefined,
+    mainTimelineStart: mainTimelineStart > 0 ? mainTimelineStart : undefined,
     exportSettings: {
       qualityPreset: params.settings.qualityPreset,
       resolution: params.settings.resolution,

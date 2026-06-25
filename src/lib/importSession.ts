@@ -1,9 +1,8 @@
-import { addToContentLibrary } from './contentLibrary';
 import { resolveVideoDuration } from './duration';
 import { stitchPhoneClips } from './phoneUpload';
 import { loadMainVideoDirect, toAssetUrl } from './video';
 import type { MainVideoSelection } from './video';
-import type { MediaAsset } from '../types/project';
+import type { MainVideoPiece } from '../types/project';
 import { cleanProjectName } from '../utils/names';
 
 export interface ImportClipRef {
@@ -28,9 +27,19 @@ export type ImportProgressHandler = (progress: ImportProgress) => void;
 
 export interface CompletedImportSession {
   mainVideo: MainVideoSelection;
-  addedBroll: MediaAsset[];
+  mainVideoPieces: MainVideoPiece[];
   clipCount: number;
   projectName: string;
+}
+
+export async function buildMainVideoPieces(clips: ImportClipRef[]): Promise<MainVideoPiece[]> {
+  return Promise.all(
+    clips.map(async (clip) => ({
+      sourcePath: clip.sourcePath,
+      displayName: cleanProjectName(clip.displayName),
+      duration: await resolveVideoDuration(clip.sourcePath, toAssetUrl(clip.sourcePath)),
+    }))
+  );
 }
 
 /** Yield to the browser so progress UI can paint between heavy steps. */
@@ -92,29 +101,6 @@ export async function resolveMainVideoFromClips(
   };
 }
 
-export async function addImportClipsToBroll(
-  clips: ImportClipRef[],
-  onProgress?: ImportProgressHandler
-): Promise<MediaAsset[]> {
-  reportProgress(onProgress, {
-    phase: 'adding-broll',
-    message: 'Adding clips to B-Roll Library…',
-    clipCount: clips.length,
-  });
-  await yieldToUi();
-
-  const brollImports = await Promise.all(
-    clips.map(async (clip) => ({
-      filePath: clip.sourcePath,
-      friendlyName: cleanProjectName(clip.displayName),
-      duration: await resolveVideoDuration(clip.sourcePath, toAssetUrl(clip.sourcePath)),
-    }))
-  );
-
-  return addToContentLibrary('broll', brollImports, { skipThumbnails: true });
-}
-
-/** @deprecated Use resolveMainVideoFromClips + addImportClipsToBroll for non-blocking flows. */
 export async function completeClipImportSession(
   clips: ImportClipRef[],
   projectName: string,
@@ -122,11 +108,11 @@ export async function completeClipImportSession(
 ): Promise<CompletedImportSession> {
   const trimmedName = projectName.trim() || 'Untitled Project';
   const mainVideo = await resolveMainVideoFromClips(clips, trimmedName, onProgress);
-  const addedBroll = await addImportClipsToBroll(clips, onProgress);
+  const mainVideoPieces = await buildMainVideoPieces(clips);
 
   return {
     mainVideo,
-    addedBroll,
+    mainVideoPieces,
     clipCount: clips.length,
     projectName: trimmedName,
   };

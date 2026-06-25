@@ -29,6 +29,13 @@ export interface TimelineClip {
   track: import('./content').TimelineTrack;
 }
 
+/** Source clips stitched into the main video — not shown in B-Roll Library. */
+export interface MainVideoPiece {
+  sourcePath: string;
+  displayName: string;
+  duration?: number;
+}
+
 /** Saved in .pulseproj files — `url` is rebuilt on load. */
 export type SavedMediaAsset = Omit<MediaAsset, 'url'>;
 
@@ -50,6 +57,7 @@ export interface PulseProject {
   name: string;
   mainVideoPath: string | null;
   mainVideoDuration: number;
+  mainVideoPieces?: MainVideoPiece[];
   mediaAssets: SavedMediaAsset[];
   timelineClips: TimelineClip[];
   selectedAssetIds: Partial<Record<LibraryCategory, string | null>>;

@@ -662,7 +662,7 @@ export function Timeline({
               key={seg.id}
               className="overview-clip overview-clip-timelapse"
               style={{
-                left: `${pct(seg.startTime)}%`,
+                left: `${pct((mainClip?.startTime ?? 0) + seg.startTime)}%`,
                 width: `${pctWidth(seg.endTime - seg.startTime)}%`,
               }}
             />
@@ -774,7 +774,7 @@ export function Timeline({
                             key={seg.id}
                             className="timeline-clip timelapse-region overlay-clip timelapse-clip"
                             style={{
-                              left: timeToPx(seg.startTime),
+                              left: timeToPx((mainClip?.startTime ?? 0) + seg.startTime),
                               width: Math.max(timeToPx(seg.endTime - seg.startTime), 8),
                             }}
                             title={`${seg.speedFactor}× timelapse`}
@@ -785,7 +785,9 @@ export function Timeline({
                         {timelapsePendingStart !== null && (
                           <div
                             className="timelapse-pending-marker"
-                            style={{ left: timeToPx(timelapsePendingStart) }}
+                            style={{
+                              left: timeToPx((mainClip?.startTime ?? 0) + timelapsePendingStart),
+                            }}
                           />
                         )}
                       </>

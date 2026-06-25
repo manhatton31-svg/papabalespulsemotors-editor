@@ -5,6 +5,7 @@ import { LIBRARY_CATEGORIES } from '../types/content';
 import type { TimelapseSegment } from '../types/timelapse';
 import type {
   AnyPulseProject,
+  MainVideoPiece,
   MediaAsset,
   PulseProject,
   PulseProjectV1,
@@ -73,6 +74,7 @@ export function buildProject(params: {
   name: string;
   mainVideoPath: string | null;
   mainVideoDuration: number;
+  mainVideoPieces?: MainVideoPiece[];
   mediaAssets: MediaAsset[];
   timelineClips: TimelineClip[];
   selectedAssetIds: Partial<Record<LibraryCategory, string | null>>;
@@ -83,6 +85,7 @@ export function buildProject(params: {
     name: params.name,
     mainVideoPath: params.mainVideoPath,
     mainVideoDuration: params.mainVideoDuration,
+    mainVideoPieces: params.mainVideoPieces,
     mediaAssets: params.mediaAssets.map(({ url: _url, ...rest }) => rest),
     timelineClips: params.timelineClips,
     timelapseSegments: params.timelapseSegments,
@@ -97,6 +100,7 @@ export async function hydrateProject(project: AnyPulseProject): Promise<{
   mainVideoPath: string | null;
   mainVideoUrl: string | null;
   mainVideoDuration: number;
+  mainVideoPieces: MainVideoPiece[];
   mediaAssets: MediaAsset[];
   timelineClips: TimelineClip[];
   selectedAssetIds: Record<LibraryCategory, string | null>;
@@ -134,6 +138,7 @@ export async function hydrateProject(project: AnyPulseProject): Promise<{
     mainVideoPath,
     mainVideoUrl,
     mainVideoDuration: normalized.mainVideoDuration,
+    mainVideoPieces: normalized.mainVideoPieces ?? [],
     mediaAssets,
     timelineClips,
     timelapseSegments: normalized.timelapseSegments ?? [],

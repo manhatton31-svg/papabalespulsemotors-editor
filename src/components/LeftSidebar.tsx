@@ -6,7 +6,7 @@ import { TimelapsePanel } from './TimelapsePanel';
 import { LEFT_NAV_PANELS, type LeftPanel } from '../types/content';
 import type { LibraryCategory } from '../types/content';
 import type { TimelapseSegment, TimelapseSpeed } from '../types/timelapse';
-import type { MediaAsset } from '../types/project';
+import type { MainVideoPiece, MediaAsset } from '../types/project';
 import './LeftSidebar.css';
 
 export type { LeftPanel };
@@ -16,6 +16,8 @@ interface LeftSidebarProps {
   onPanelChange: (panel: LeftPanel) => void;
   hasVideo: boolean;
   mediaAssets: MediaAsset[];
+  mainVideoPieces?: MainVideoPiece[];
+  mainVideoPath?: string | null;
   selectedAssetIds: Record<LibraryCategory, string | null>;
   timelapseModeActive: boolean;
   timelapseSpeed: TimelapseSpeed;
@@ -43,6 +45,8 @@ export function LeftSidebar({
   onPanelChange,
   hasVideo,
   mediaAssets,
+  mainVideoPieces = [],
+  mainVideoPath = null,
   selectedAssetIds,
   timelapseModeActive,
   timelapseSpeed,
@@ -64,7 +68,17 @@ export function LeftSidebar({
   onGenerateHookPreview,
   onInsertDiagram,
 }: LeftSidebarProps) {
-  const brollAssets = mediaAssets.filter((a) => a.category === 'broll');
+  const mainSourcePaths = new Set(
+    [
+      ...mainVideoPieces.map((piece) => piece.sourcePath),
+      ...(mainVideoPath ? [mainVideoPath] : []),
+    ].map((path) => path.replace(/\\/g, '/').toLowerCase())
+  );
+  const brollAssets = mediaAssets.filter(
+    (a) =>
+      a.category === 'broll' &&
+      !mainSourcePaths.has(a.filePath.replace(/\\/g, '/').toLowerCase())
+  );
   const introAssets = mediaAssets.filter((a) => a.category === 'intro');
   const outroAssets = mediaAssets.filter((a) => a.category === 'outro');
   const diagramAssets = mediaAssets.filter((a) => a.category === 'diagram');

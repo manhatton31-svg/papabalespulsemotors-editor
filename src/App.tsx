@@ -41,21 +41,27 @@ import { ImportProgressBanner } from './components/ImportProgressBanner';
 import { PhoneUploadModal } from './components/PhoneUploadModal';
 import { ProjectNamingModal } from './components/ProjectNamingModal';
 import {
-  addImportClipsToBroll,
+  buildMainVideoPieces,
   resolveMainVideoFromClips,
   yieldToUi,
   type ImportClipRef,
   type ImportProgress,
 } from './lib/importSession';
+import {
+  computeExportDuration,
+  computePreviewDuration,
+  getMainClipOffset,
+  globalTimeToMainSource,
+  mainSourceToGlobalTime,
+} from './lib/timelinePlayback';
 import type { PhoneUploadReceivedEvent } from './lib/phoneUpload';
 import { loadMainVideoDirect, openMainVideos, openMediaForCategory } from './lib/video';
 import type { MainVideoSelection } from './lib/video';
 import { cleanProjectName, fileNameWithoutExt } from './utils/names';
 import type { LibraryCategory } from './types/content';
 import type { OverlayTrack } from './types/content';
-import type { MediaAsset, TimelineClip } from './types/project';
+import type { MainVideoPiece, MediaAsset, TimelineClip } from './types/project';
 import type { TimelapseSegment, TimelapseSpeed } from './types/timelapse';
-import { outputDurationAfterBake } from './types/timelapse';
 import './App.css';
 
 export default function App() {
@@ -94,6 +100,8 @@ export default function App() {
   const [pcImportProjectName, setPcImportProjectName] = useState('');
   const [pcImportError, setPcImportError] = useState<string | null>(null);
   const [importPipelineProgress, setImportPipelineProgress] = useState<ImportProgress | null>(null);
+  const [mainVideoPieces, setMainVideoPieces] = useState<MainVideoPiece[]>([]);
+  const [playbackResetKey, setPlaybackResetKey] = useState(0);
   const [saveNamingOpen, setSaveNamingOpen] = useState(false);
   const [saveProjectNameDraft, setSaveProjectNameDraft] = useState('');
   const [saveProcessing, setSaveProcessing] = useState(false);
@@ -164,9 +172,27 @@ export default function App() {
 
   const timelineSourceDuration = sourceVideoDuration || mainVideoDuration;
 
+  const previewDuration = useMemo(
+    () => computePreviewDuration(timelineSourceDuration, timelineClips),
+    [timelineSourceDuration, timelineClips]
+  );
+
+  const mainClipOffset = useMemo(() => getMainClipOffset(timelineClips), [timelineClips]);
+
   const exportDuration = useMemo(
-    () => outputDurationAfterBake(timelineSourceDuration, timelapseSegments),
-    [timelineSourceDuration, timelapseSegments]
+    () =>
+      computeExportDuration({
+        sourceDuration: timelineSourceDuration,
+        timelineClips,
+        timelapseSegments,
+        include: {
+          broll: true,
+          introsOutros: true,
+          timelapse: true,
+          diagrams: true,
+        },
+      }),
+    [timelineSourceDuration, timelineClips, timelapseSegments]
   );
 
   const applyMainDuration = useCallback((duration: number) => {
@@ -211,6 +237,7 @@ export default function App() {
     setPlayheadEngaged(false);
     setIsPlaying(false);
     setSelectedClipId(null);
+    setPlaybackResetKey((k) => k + 1);
 
     if (!options?.silent) {
       showStatus('Video loaded — ready to edit');
@@ -225,6 +252,13 @@ export default function App() {
       try {
         const result = await loadMainVideoDirect(sourcePath);
         loadMainVideo(result);
+        setMainVideoPieces([
+          {
+            sourcePath: result.filePath,
+            displayName: fileNameWithoutExt(result.filePath),
+            duration: result.duration,
+          },
+        ]);
       } catch (err) {
         showStatus(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
       } finally {
@@ -251,6 +285,10 @@ export default function App() {
       if (hookAssets.length > 0) {
         setSelectedAssetIds((prev) => ({ ...prev, intro: hookAssets[0].id }));
       }
+      setPlayhead(0);
+      setPlayheadEngaged(false);
+      setIsPlaying(false);
+      setPlaybackResetKey((k) => k + 1);
     },
     []
   );
@@ -276,18 +314,14 @@ export default function App() {
         const mainClip = loadMainVideo(mainVideo, { silent: true });
         setLeftPanel('broll');
 
+        const pieces = await buildMainVideoPieces(clips);
+        setMainVideoPieces(pieces);
+
         if (isSingleClip) {
           showStatus('Video loaded. Generating hook preview...');
         } else {
           showStatus('Stitch complete. Generating hook preview...');
         }
-
-        const brollPromise = addImportClipsToBroll(clips, onProgress).catch((err) => {
-          showStatus(
-            `B-Roll library update failed: ${err instanceof Error ? err.message : String(err)}`
-          );
-          return [] as MediaAsset[];
-        });
 
         onProgress({
           phase: 'generating-hook',
@@ -303,8 +337,8 @@ export default function App() {
         });
 
         const importReadyMessage = isSingleClip
-          ? `Project "${trimmedName}" ready — clip added to B-Roll Library`
-          : `Project "${trimmedName}" ready — ${clipCount} clips stitched and added to B-Roll Library`;
+          ? `Project "${trimmedName}" ready`
+          : `Project "${trimmedName}" ready — ${clipCount} clips stitched into main video`;
 
         setIsGeneratingHook(true);
         try {
@@ -321,11 +355,6 @@ export default function App() {
           setIsGeneratingHook(false);
         }
 
-        const addedBroll = await brollPromise;
-        if (addedBroll.length > 0) {
-          setMediaAssets((prev) => mergeMediaAssets(prev, addedBroll));
-          setSelectedAssetIds((prev) => ({ ...prev, broll: addedBroll[0].id }));
-        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         showStatus(`Import failed: ${message}`);
@@ -511,6 +540,9 @@ export default function App() {
       const hookAssets = await generateHookPreviewAssets(mainVideoPath);
       setMediaAssets((prev) => mergeMediaAssets(prev, hookAssets));
       applyHookPreviewResult(hookAssets, [], null);
+      setPlayhead(0);
+      setIsPlaying(false);
+      setPlaybackResetKey((k) => k + 1);
       setLeftPanel('introsOutros');
       showStatus('Hook preview generated and placed at start');
     } catch (err) {
@@ -532,18 +564,25 @@ export default function App() {
   };
 
   const handleTimelapseClick = useCallback(
-    (time: number) => {
-      setPlayheadEngaged(true);
-      if (timelapsePendingStart === null) {
-        setTimelapsePendingStart(time);
-        setPlayhead(time);
-        setIsPlaying(false);
-        showStatus(`Timelapse IN at ${formatShortTime(time)}`);
+    (globalTime: number) => {
+      const mainOffset = getMainClipOffset(timelineClips);
+      const sourceTime = globalTimeToMainSource(globalTime, mainOffset);
+      if (sourceTime < 0 || sourceTime > timelineSourceDuration) {
+        showStatus('Mark timelapse regions on the main video track');
         return;
       }
 
-      const start = Math.min(timelapsePendingStart, time);
-      const end = Math.max(timelapsePendingStart, time);
+      setPlayheadEngaged(true);
+      if (timelapsePendingStart === null) {
+        setTimelapsePendingStart(sourceTime);
+        setPlayhead(mainSourceToGlobalTime(sourceTime, mainOffset));
+        setIsPlaying(false);
+        showStatus(`Timelapse IN at ${formatShortTime(sourceTime)}`);
+        return;
+      }
+
+      const start = Math.min(timelapsePendingStart, sourceTime);
+      const end = Math.max(timelapsePendingStart, sourceTime);
       setTimelapsePendingStart(null);
 
       if (end - start < 0.25) {
@@ -559,10 +598,10 @@ export default function App() {
       };
 
       setTimelapseSegments((prev) => [...prev, segment]);
-      setPlayhead(end);
+      setPlayhead(mainSourceToGlobalTime(end, mainOffset));
       showStatus(`Timelapse ${timelapseSpeed}× added — live preview (export bakes on Export MP4)`);
     },
-    [timelapsePendingStart, timelapseSpeed]
+    [timelapsePendingStart, timelapseSpeed, timelineClips, timelineSourceDuration]
   );
 
   const handleClipMove = useCallback((clipId: string, newStartTime: number) => {
@@ -602,13 +641,13 @@ export default function App() {
 
   const togglePlay = () => {
     if (!mainVideoUrl) return;
-    if (!isPlaying && playhead >= timelineSourceDuration) setPlayhead(0);
+    if (!isPlaying && playhead >= previewDuration) setPlayhead(0);
     setIsPlaying((p) => !p);
   };
 
   const handleEnded = () => {
     setIsPlaying(false);
-    setPlayhead(timelineSourceDuration);
+    setPlayhead(previewDuration);
   };
 
   const getProjectSnapshot = useCallback(
@@ -617,6 +656,7 @@ export default function App() {
         name: projectName,
         mainVideoPath,
         mainVideoDuration,
+        mainVideoPieces,
         mediaAssets,
         timelineClips,
         selectedAssetIds,
@@ -626,6 +666,7 @@ export default function App() {
       projectName,
       mainVideoPath,
       mainVideoDuration,
+      mainVideoPieces,
       mediaAssets,
       timelineClips,
       selectedAssetIds,
@@ -793,6 +834,7 @@ export default function App() {
       setMainVideoUrl(state.mainVideoUrl);
       setSourceVideoDuration(state.mainVideoDuration);
       setMainVideoDuration(state.mainVideoDuration);
+      setMainVideoPieces(state.mainVideoPieces);
       setTimelapseSegments(state.timelapseSegments);
       setTimelapseModeActive(false);
       setTimelapsePendingStart(null);
@@ -831,6 +873,7 @@ export default function App() {
       setPlayhead(0);
       setPlayheadEngaged(false);
       setIsPlaying(false);
+      setPlaybackResetKey((k) => k + 1);
     },
     []
   );
@@ -923,6 +966,8 @@ export default function App() {
           onPanelChange={setLeftPanel}
           hasVideo={!!mainVideoUrl}
           mediaAssets={mediaAssets}
+          mainVideoPieces={mainVideoPieces}
+          mainVideoPath={mainVideoPath}
           selectedAssetIds={selectedAssetIds}
           timelapseModeActive={timelapseModeActive}
           timelapseSpeed={timelapseSpeed}
@@ -954,6 +999,9 @@ export default function App() {
           <VideoPreview
             mainVideoUrl={mainVideoUrl}
             mainVideoDuration={timelineSourceDuration}
+            previewDuration={previewDuration}
+            mainClipOffset={mainClipOffset}
+            playbackResetKey={playbackResetKey}
             exportDuration={exportDuration}
             mediaAssets={mediaAssets}
             timelineClips={timelineClips}
