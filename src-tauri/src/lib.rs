@@ -1259,6 +1259,44 @@ const HOOK_MIN_TOTAL_SECS: f64 = 15.0;
 const HOOK_MAX_TOTAL_SECS: f64 = 25.0;
 const HOOK_SEGMENT_MIN_SECS: f64 = 3.0;
 const HOOK_SEGMENT_MAX_SECS: f64 = 7.0;
+const HOOK_CLIP_COUNT: usize = 4;
+const HOOK_CROSSFADE_SECS: f64 = 0.5;
+const HOOK_MONTAGE_NAME: &str = "Hook Preview";
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum HookRole {
+    Teaser = 0,
+    Setup = 1,
+    Insight = 2,
+    Payoff = 3,
+}
+
+#[derive(Clone)]
+struct TimeRange {
+    start: f64,
+    end: f64,
+}
+
+impl TimeRange {
+    fn duration(&self) -> f64 {
+        (self.end - self.start).max(0.0)
+    }
+
+    fn overlap_secs(&self, start: f64, end: f64) -> f64 {
+        let overlap_start = self.start.max(start);
+        let overlap_end = self.end.min(end);
+        (overlap_end - overlap_start).max(0.0)
+    }
+}
+
+#[derive(Clone)]
+struct PlannedHookSegment {
+    start: f64,
+    end: f64,
+    role: HookRole,
+    speech_ratio: f64,
+    motion_score: f64,
+}
 
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1322,6 +1360,374 @@ fn detect_scene_timestamps(path: &str, duration: f64) -> Result<Vec<f64>, String
     times.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     times.dedup_by(|a, b| (*a - *b).abs() < 0.45);
     Ok(times)
+}
+
+/// Audio-only pass — fast even on 20–30 minute videos.
+fn detect_speech_regions(path: &str, duration: f64) -> Result<Vec<TimeRange>, String> {
+    let mut command = tool_command("ffmpeg")?;
+    configure_low_priority(&mut command, true);
+    let output = command
+        .args([
+            "-hide_banner",
+            "-nostdin",
+            "-i",
+            path,
+            "-vn",
+            "-af",
+            "silencedetect=noise=-32dB:d=0.35",
+            "-f",
+            "null",
+            "-",
+        ])
+        .output()
+        .map_err(|e| format!("Speech analysis failed: {e}"))?;
+
+    let mut silence_ranges = Vec::new();
+    let mut silence_start: Option<f64> = None;
+
+    for line in String::from_utf8_lossy(&output.stderr).lines() {
+        if let Some(pos) = line.find("silence_start:") {
+            let token = line[pos + "silence_start:".len()..]
+                .trim()
+                .split_whitespace()
+                .next()
+                .unwrap_or("");
+            if let Ok(value) = token.parse::<f64>() {
+                if value.is_finite() {
+                    silence_start = Some(value.max(0.0));
+                }
+            }
+        }
+        if let Some(pos) = line.find("silence_end:") {
+            let token = line[pos + "silence_end:".len()..]
+                .trim()
+                .split_whitespace()
+                .next()
+                .unwrap_or("");
+            if let Ok(end) = token.parse::<f64>() {
+                if end.is_finite() {
+                    if let Some(start) = silence_start.take() {
+                        if end > start + 0.05 {
+                            silence_ranges.push(TimeRange { start, end });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut speech = Vec::new();
+    let mut cursor = 0.0;
+    for silence in silence_ranges {
+        if silence.start > cursor + 0.25 {
+            speech.push(TimeRange {
+                start: cursor,
+                end: silence.start,
+            });
+        }
+        cursor = silence.end.max(cursor);
+    }
+    if cursor < duration - 0.25 {
+        speech.push(TimeRange {
+            start: cursor,
+            end: duration,
+        });
+    }
+
+    Ok(speech)
+}
+
+fn speech_ratio_in_window(speech: &[TimeRange], start: f64, end: f64) -> f64 {
+    let window_len = (end - start).max(0.001);
+    let covered: f64 = speech
+        .iter()
+        .map(|region| region.overlap_secs(start, end))
+        .sum();
+    (covered / window_len).clamp(0.0, 1.0)
+}
+
+fn motion_score_in_window(scene_times: &[f64], start: f64, end: f64) -> f64 {
+    let count = scene_times
+        .iter()
+        .filter(|t| **t >= start && **t <= end)
+        .count();
+    (count as f64 / 3.0).min(1.0)
+}
+
+fn build_hook_candidate_centers(
+    duration: f64,
+    scene_times: &[f64],
+    speech: &[TimeRange],
+) -> Vec<f64> {
+    let margin_start = duration * 0.04;
+    let margin_end = duration * 0.96;
+    let mut candidates: Vec<f64> = scene_times
+        .iter()
+        .copied()
+        .filter(|t| *t >= margin_start && *t <= margin_end)
+        .collect();
+
+    for region in speech {
+        if region.duration() >= 1.2 {
+            let mid = (region.start + region.end) * 0.5;
+            if mid >= margin_start && mid <= margin_end {
+                candidates.push(mid);
+            }
+        }
+    }
+
+    for i in 1..=12 {
+        candidates.push(margin_start + (margin_end - margin_start) * (i as f64 / 13.0));
+    }
+
+    candidates.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    candidates.dedup_by(|a, b| (*a - *b).abs() < 0.45);
+    candidates
+}
+
+fn score_hook_candidate(
+    center: f64,
+    seg_duration: f64,
+    duration: f64,
+    role: HookRole,
+    speech: &[TimeRange],
+    scene_times: &[f64],
+) -> (f64, f64, f64) {
+    let start = (center - seg_duration * 0.5)
+        .max(0.0)
+        .min((duration - seg_duration).max(0.0));
+    let end = (start + seg_duration).min(duration);
+    let speech_ratio = speech_ratio_in_window(speech, start, end);
+    let motion = motion_score_in_window(scene_times, start, end);
+
+    let target_frac = match role {
+        HookRole::Teaser => 0.10,
+        HookRole::Setup => 0.32,
+        HookRole::Insight => 0.55,
+        HookRole::Payoff => 0.82,
+    };
+    let position = (1.0 - ((center / duration.max(0.001)) - target_frac).abs() / 0.28).clamp(0.0, 1.0);
+    let silence_penalty = if speech_ratio < 0.12 {
+        0.4
+    } else if speech_ratio < 0.22 {
+        0.15
+    } else {
+        0.0
+    };
+
+    let score = match role {
+        HookRole::Teaser => motion * 0.40 + speech_ratio * 0.35 + position * 0.25,
+        HookRole::Setup => speech_ratio * 0.55 + motion * 0.30 + position * 0.15,
+        HookRole::Insight => speech_ratio * 0.60 + motion * 0.25 + position * 0.15,
+        HookRole::Payoff => motion * 0.40 + speech_ratio * 0.40 + position * 0.20,
+    } - silence_penalty;
+
+    (score, speech_ratio, motion)
+}
+
+fn segments_too_close(a: &PlannedHookSegment, start: f64, end: f64, min_gap: f64) -> bool {
+    let gap = if a.end <= start {
+        start - a.end
+    } else if end <= a.start {
+        a.start - end
+    } else {
+        -1.0
+    };
+    gap < min_gap
+}
+
+fn transition_text_between(from: &PlannedHookSegment, to: &PlannedHookSegment) -> String {
+    const TEASER_SETUP: &[&str] = &[
+        "The key insight…",
+        "Here's what matters",
+        "Now watch closely",
+    ];
+    const SETUP_INSIGHT: &[&str] = &[
+        "Watch what happens next",
+        "Most people miss this",
+        "This is the tricky part",
+    ];
+    const INSIGHT_PAYOFF: &[&str] = &[
+        "This is where it clicks",
+        "Here's the breakthrough",
+        "See it in action",
+    ];
+
+    let pool: &[&str] = match (from.role, to.role) {
+        (HookRole::Teaser, HookRole::Setup) => TEASER_SETUP,
+        (HookRole::Setup, HookRole::Insight) => SETUP_INSIGHT,
+        (HookRole::Insight, HookRole::Payoff) => INSIGHT_PAYOFF,
+        _ => &["Keep watching…"],
+    };
+
+    let mut idx =
+        ((from.start * 17.0 + to.end * 31.0 + from.speech_ratio * 100.0) as usize) % pool.len();
+    let mut text = pool[idx].to_string();
+
+    if to.speech_ratio > 0.55 && matches!(to.role, HookRole::Setup | HookRole::Insight) {
+        text = "Listen to this part".to_string();
+        idx = 0;
+    }
+    if to.motion_score > 0.65 && to.role == HookRole::Payoff {
+        text = "Watch what happens next".to_string();
+    }
+    if from.speech_ratio > 0.5 && to.motion_score > 0.5 && to.role == HookRole::Payoff {
+        text = "Here's the breakthrough".to_string();
+    }
+
+    let words: Vec<&str> = text.split_whitespace().collect();
+    if words.len() > 8 {
+        text = words[..8].join(" ");
+    }
+
+    let _ = idx;
+    text
+}
+
+fn hook_transition_start_times(durations: &[f64], crossfade: f64) -> Vec<f64> {
+    let mut times = Vec::new();
+    for index in 1..durations.len() {
+        let offset: f64 = durations[..index].iter().sum::<f64>() - index as f64 * crossfade;
+        times.push(offset.max(0.0));
+    }
+    times
+}
+
+fn resolve_hook_overlay_font() -> String {
+    #[cfg(windows)]
+    {
+        return "C\\\\:/Windows/Fonts/segoeui.ttf".to_string();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        return "/System/Library/Fonts/Supplemental/Arial Bold.ttf".to_string();
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        return "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf".to_string();
+    }
+    #[allow(unreachable_code)]
+    "sans".to_string()
+}
+
+fn escape_drawtext_text(text: &str) -> String {
+    text.replace('\\', "\\\\")
+        .replace(':', "\\:")
+        .replace('\'', "\\'")
+        .replace('%', "\\%")
+}
+
+fn append_drawtext_overlay(
+    filter: &mut String,
+    input_label: &str,
+    output_label: &str,
+    text: &str,
+    t_start: f64,
+    t_end: f64,
+    font: &str,
+) {
+    let escaped = escape_drawtext_text(text);
+    let fade = 0.12_f64.min((t_end - t_start) * 0.25);
+    let fade_in_end = t_start + fade;
+    let fade_out_start = t_end - fade;
+    filter.push_str(&format!(
+        "[{input_label}]drawtext=fontfile={font}:text='{escaped}':fontsize=42:fontcolor=white:borderw=2:bordercolor=black@0.65:box=1:boxcolor=black@0.5:boxborderw=14:x=(w-text_w)/2:y=h*0.12:enable='between(t,{t_start:.3},{t_end:.3})':alpha='if(lt(t,{fade_in_end:.3}),(t-{t_start:.3})/{fade:.3},if(lt(t,{fade_out_start:.3}),1,({t_end:.3}-t)/{fade:.3}))'[{output_label}];"
+    ));
+}
+
+fn build_hook_montage_filter(
+    durations: &[f64],
+    transitions: &[String],
+    crossfade: f64,
+) -> (String, String, String) {
+    let xfade = build_phone_stitch_filter(durations, crossfade);
+    if transitions.is_empty() {
+        return (xfade, "vout".to_string(), "aout".to_string());
+    }
+
+    let font = resolve_hook_overlay_font();
+    let transition_starts = hook_transition_start_times(durations, crossfade);
+    let mut filter = xfade;
+    let mut video_label = "vout".to_string();
+
+    for (index, text) in transitions.iter().enumerate() {
+        let t_start = transition_starts[index];
+        let t_end = t_start + crossfade;
+        let out_label = if index == transitions.len() - 1 {
+            "vfinal".to_string()
+        } else {
+            format!("vt{index}")
+        };
+        append_drawtext_overlay(
+            &mut filter,
+            &video_label,
+            &out_label,
+            text,
+            t_start,
+            t_end,
+            &font,
+        );
+        video_label = out_label;
+    }
+
+    let final_video = if video_label == "vout" {
+        "vout".to_string()
+    } else {
+        video_label
+    };
+    (filter, final_video, "aout".to_string())
+}
+
+fn stitch_hook_montage(
+    segment_paths: &[String],
+    durations: &[f64],
+    transitions: &[String],
+    output_path: &str,
+) -> Result<(), String> {
+    if segment_paths.is_empty() {
+        return Err("No hook segments to stitch".into());
+    }
+    if segment_paths.len() == 1 {
+        fs::copy(&segment_paths[0], output_path).map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+
+    let crossfade = HOOK_CROSSFADE_SECS;
+    let (filter, video_out, audio_out) =
+        build_hook_montage_filter(durations, transitions, crossfade);
+    let video_map = format!("[{video_out}]");
+    let audio_map = format!("[{audio_out}]");
+
+    let mut args = vec!["-y", "-hide_banner", "-nostdin"];
+    for path in segment_paths {
+        args.push("-i");
+        args.push(path.as_str());
+    }
+    args.extend([
+        "-filter_complex",
+        &filter,
+        "-map",
+        &video_map,
+        "-map",
+        &audio_map,
+        "-c:v",
+        "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "23",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        "-movflags",
+        "+faststart",
+        output_path,
+    ]);
+
+    run_ffmpeg_simple(&args, "Failed to stitch hook montage", false)
 }
 
 fn extract_hook_segment(
@@ -1414,6 +1820,100 @@ fn emit_hook_complete(
     );
 }
 
+fn plan_hook_segment_ranges(
+    duration: f64,
+    scene_times: &[f64],
+    speech: &[TimeRange],
+) -> Vec<PlannedHookSegment> {
+    if duration <= 0.0 {
+        return Vec::new();
+    }
+
+    if duration <= HOOK_MIN_TOTAL_SECS {
+        return vec![PlannedHookSegment {
+            start: 0.0,
+            end: duration,
+            role: HookRole::Teaser,
+            speech_ratio: speech_ratio_in_window(speech, 0.0, duration),
+            motion_score: motion_score_in_window(scene_times, 0.0, duration),
+        }];
+    }
+
+    let crossfade_overlap =
+        HOOK_CROSSFADE_SECS * (HOOK_CLIP_COUNT.saturating_sub(1) as f64);
+    let target_total = HOOK_TARGET_TOTAL_SECS
+        .min(duration * 0.45)
+        .clamp(
+            HOOK_MIN_TOTAL_SECS.min(duration),
+            HOOK_MAX_TOTAL_SECS.min(duration),
+        );
+    let seg_duration = ((target_total + crossfade_overlap) / HOOK_CLIP_COUNT as f64)
+        .clamp(HOOK_SEGMENT_MIN_SECS, HOOK_SEGMENT_MAX_SECS);
+
+    let candidates = build_hook_candidate_centers(duration, scene_times, speech);
+    let min_gap = seg_duration * 0.35;
+    let roles = [
+        HookRole::Teaser,
+        HookRole::Setup,
+        HookRole::Insight,
+        HookRole::Payoff,
+    ];
+
+    let mut selected = Vec::new();
+    for role in roles {
+        let mut best: Option<PlannedHookSegment> = None;
+        let mut best_score = f64::NEG_INFINITY;
+
+        for &center in &candidates {
+            let start = (center - seg_duration * 0.5)
+                .max(0.0)
+                .min((duration - seg_duration).max(0.0));
+            let end = (start + seg_duration).min(duration);
+            if end - start < 1.5 {
+                continue;
+            }
+
+            if selected
+                .iter()
+                .any(|seg| segments_too_close(seg, start, end, min_gap))
+            {
+                continue;
+            }
+
+            let (score, speech_ratio, motion) =
+                score_hook_candidate(center, seg_duration, duration, role, speech, scene_times);
+            if score > best_score {
+                best_score = score;
+                best = Some(PlannedHookSegment {
+                    start,
+                    end,
+                    role,
+                    speech_ratio,
+                    motion_score: motion,
+                });
+            }
+        }
+
+        if let Some(segment) = best {
+            selected.push(segment);
+        }
+    }
+
+    if selected.is_empty() {
+        let end = target_total.min(duration);
+        return vec![PlannedHookSegment {
+            start: 0.0,
+            end,
+            role: HookRole::Teaser,
+            speech_ratio: speech_ratio_in_window(speech, 0.0, end),
+            motion_score: motion_score_in_window(scene_times, 0.0, end),
+        }];
+    }
+
+    selected.sort_by_key(|segment| segment.role);
+    selected
+}
+
 fn generate_hook_preview_core(
     app: &tauri::AppHandle,
     job_id: Option<&str>,
@@ -1429,11 +1929,20 @@ fn generate_hook_preview_core(
     validate_main_video_source(main_path)?;
     let duration = resolve_video_duration(main_path, None)?;
 
-    let scene_times = detect_scene_timestamps(main_path, duration).unwrap_or_default();
-    emit(25.0, "running", Some("Planning hook montage…"));
-    let ranges = plan_hook_segment_ranges(duration, &scene_times);
+    let (scene_times, speech_regions) = std::thread::scope(|scope| {
+        let main = main_path.to_string();
+        let dur = duration;
+        let scene_handle = scope.spawn(move || detect_scene_timestamps(&main, dur));
+        let speech_handle = scope.spawn(move || detect_speech_regions(main_path, duration));
+        let scenes = scene_handle.join().unwrap_or(Ok(Vec::new())).unwrap_or_default();
+        let speech = speech_handle.join().unwrap_or(Ok(Vec::new())).unwrap_or_default();
+        (scenes, speech)
+    });
 
-    if ranges.is_empty() {
+    emit(22.0, "running", Some("Selecting narrative hook clips…"));
+    let planned = plan_hook_segment_ranges(duration, &scene_times, &speech_regions);
+
+    if planned.is_empty() {
         return Err("Video is too short to generate a hook preview".into());
     }
 
@@ -1449,20 +1958,23 @@ fn generate_hook_preview_core(
         .join(format!("hook_{stamp}"));
     fs::create_dir_all(&work_dir).map_err(|e| e.to_string())?;
 
-    let total = ranges.len().max(1);
-    let results: std::sync::Mutex<Vec<Option<HookClipResult>>> =
-        std::sync::Mutex::new(vec![None; ranges.len()]);
+    let total = planned.len().max(1);
+    let extract_results: std::sync::Mutex<Vec<Option<String>>> =
+        std::sync::Mutex::new(vec![None; planned.len()]);
     let extract_err: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 
+    emit(28.0, "running", Some("Extracting hook segments…"));
     std::thread::scope(|scope| {
-        for (i, (start, end)) in ranges.iter().enumerate() {
+        for (i, segment) in planned.iter().enumerate() {
             let segment_path = work_dir.join(format!("hook_{i:02}.mp4"));
             let segment_str = segment_path.to_string_lossy().into_owned();
             let main = main_path.to_string();
             let err_slot = &extract_err;
-            let out_slot = &results;
+            let out_slot = &extract_results;
+            let start = segment.start;
+            let end = segment.end;
             scope.spawn(move || {
-                if let Err(e) = extract_hook_segment(&main, *start, *end, &segment_str) {
+                if let Err(e) = extract_hook_segment(&main, start, end, &segment_str) {
                     if let Ok(mut guard) = err_slot.lock() {
                         if guard.is_none() {
                             *guard = Some(e);
@@ -1470,13 +1982,8 @@ fn generate_hook_preview_core(
                     }
                     return;
                 }
-                let seg_duration = (end - start).max(0.0);
                 if let Ok(mut guard) = out_slot.lock() {
-                    guard[i] = Some(HookClipResult {
-                        file_path: segment_str,
-                        duration: seg_duration,
-                        friendly_name: format!("Hook {}", i + 1),
-                    });
+                    guard[i] = Some(segment_str);
                 }
             });
         }
@@ -1486,85 +1993,108 @@ fn generate_hook_preview_core(
         return Err(err);
     }
 
-    let collected = results
+    let raw_paths = extract_results
         .into_inner()
         .map_err(|_| "Hook extraction interrupted".to_string())?;
-
-    let mut final_results = Vec::new();
-    for (i, item) in collected.into_iter().enumerate() {
-        let progress = 30.0 + ((i + 1) as f64 / total as f64) * 65.0;
+    let mut segment_paths = Vec::new();
+    for (i, item) in raw_paths.into_iter().enumerate() {
+        let progress = 35.0 + ((i + 1) as f64 / total as f64) * 20.0;
         emit(
             progress,
             "running",
-            Some(&format!("Extracting hook clip {} of {total}…", i + 1)),
+            Some(&format!("Extracted hook segment {} of {total}", i + 1)),
         );
-        final_results.push(item.ok_or_else(|| format!("Hook clip {} failed to extract", i + 1))?);
+        segment_paths.push(item.ok_or_else(|| format!("Hook segment {} failed to extract", i + 1))?);
+    }
+
+    let norm_results: std::sync::Mutex<Vec<Option<String>>> =
+        std::sync::Mutex::new(vec![None; segment_paths.len()]);
+    let norm_err: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+    emit(58.0, "running", Some("Preparing segments for montage…"));
+    std::thread::scope(|scope| {
+        for (i, raw_path) in segment_paths.iter().enumerate() {
+            let norm_path = work_dir
+                .join(format!("norm_{i:02}.mp4"))
+                .to_string_lossy()
+                .into_owned();
+            let input = raw_path.clone();
+            let err_slot = &norm_err;
+            let out_slot = &norm_results;
+            scope.spawn(move || {
+                if let Err(e) = normalize_phone_clip_for_stitch(&input, &norm_path) {
+                    if let Ok(mut guard) = err_slot.lock() {
+                        if guard.is_none() {
+                            *guard = Some(e);
+                        }
+                    }
+                    return;
+                }
+                if let Ok(mut guard) = out_slot.lock() {
+                    guard[i] = Some(norm_path);
+                }
+            });
+        }
+    });
+
+    if let Some(err) = norm_err.lock().ok().and_then(|g| g.clone()) {
+        return Err(err);
+    }
+
+    let normalized_paths = norm_results
+        .into_inner()
+        .map_err(|_| "Hook normalization interrupted".to_string())?;
+    let mut stitch_inputs = Vec::new();
+    let mut stitch_durations = Vec::new();
+    for (i, item) in normalized_paths.into_iter().enumerate() {
+        let path = item.ok_or_else(|| format!("Hook segment {} failed to normalize", i + 1))?;
+        let seg_duration = (planned[i].end - planned[i].start).max(0.0);
+        stitch_durations.push(seg_duration);
+        stitch_inputs.push(path);
+    }
+
+    let mut transitions = Vec::new();
+    for pair in planned.windows(2) {
+        transitions.push(transition_text_between(&pair[0], &pair[1]));
+    }
+
+    emit(78.0, "running", Some("Stitching hook montage with transitions…"));
+    let montage_path = work_dir
+        .join("hook_preview.mp4")
+        .to_string_lossy()
+        .into_owned();
+    stitch_hook_montage(
+        &stitch_inputs,
+        &stitch_durations,
+        &transitions,
+        &montage_path,
+    )?;
+
+    let montage_duration = resolve_video_duration(&montage_path, None).unwrap_or_else(|_| {
+        let sum: f64 = stitch_durations.iter().sum();
+        let crossfades = HOOK_CROSSFADE_SECS * (stitch_durations.len().saturating_sub(1) as f64);
+        (sum - crossfades).max(0.0)
+    });
+
+    let mut final_results = Vec::new();
+    if planned.len() > 1 {
+        final_results.push(HookClipResult {
+            file_path: montage_path,
+            duration: montage_duration,
+            friendly_name: HOOK_MONTAGE_NAME.to_string(),
+        });
+    }
+
+    for (i, segment) in planned.iter().enumerate() {
+        final_results.push(HookClipResult {
+            file_path: segment_paths[i].clone(),
+            duration: (segment.end - segment.start).max(0.0),
+            friendly_name: format!("Hook {}", i + 1),
+        });
     }
 
     emit(100.0, "completed", Some("Hook preview ready"));
     Ok(final_results)
-}
-
-fn plan_hook_segment_ranges(duration: f64, scene_times: &[f64]) -> Vec<(f64, f64)> {
-    if duration <= 0.0 {
-        return Vec::new();
-    }
-
-    if duration <= HOOK_MIN_TOTAL_SECS {
-        return vec![(0.0, duration)];
-    }
-
-    let target_total = HOOK_TARGET_TOTAL_SECS
-        .min(duration * 0.45)
-        .clamp(
-            HOOK_MIN_TOTAL_SECS.min(duration),
-            HOOK_MAX_TOTAL_SECS.min(duration),
-        );
-
-    let margin_start = duration * 0.04;
-    let margin_end = duration * 0.96;
-
-    let mut candidates: Vec<f64> = scene_times
-        .iter()
-        .copied()
-        .filter(|t| *t >= margin_start && *t <= margin_end)
-        .collect();
-
-    if candidates.len() < 3 {
-        for i in 1..=5 {
-            candidates.push(margin_start + (margin_end - margin_start) * (i as f64 / 6.0));
-        }
-        candidates.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        candidates.dedup_by(|a, b| (*a - *b).abs() < 0.45);
-    }
-
-    let num_segments = ((target_total / 5.0).ceil() as usize).clamp(3, 5);
-    let seg_duration =
-        (target_total / num_segments as f64).clamp(HOOK_SEGMENT_MIN_SECS, HOOK_SEGMENT_MAX_SECS);
-
-    let mut ranges = Vec::new();
-    for i in 0..num_segments {
-        let idx = if num_segments <= 1 {
-            0
-        } else {
-            (i * candidates.len().saturating_sub(1)) / (num_segments - 1)
-        };
-        let center = candidates[idx.min(candidates.len().saturating_sub(1))];
-        let start = (center - seg_duration * 0.5)
-            .max(0.0)
-            .min((duration - seg_duration).max(0.0));
-        let end = (start + seg_duration).min(duration);
-        if end - start >= 1.5 {
-            ranges.push((start, end));
-        }
-    }
-
-    if ranges.is_empty() {
-        let end = target_total.min(duration);
-        ranges.push((0.0, end));
-    }
-
-    ranges
 }
 
 /// Analyze the main video and extract engaging 15–25s hook segments (blocking).

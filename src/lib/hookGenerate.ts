@@ -109,22 +109,41 @@ export async function generateHookPreviewAssets(
   );
 }
 
+export const HOOK_MONTAGE_NAME = 'Hook Preview';
+
 const HOOK_CLIP_NAME = /^Hook \d+$/;
+
+export function isHookMontageAsset(asset: MediaAsset): boolean {
+  return asset.category === 'intro' && asset.friendlyName === HOOK_MONTAGE_NAME;
+}
 
 export function isHookClipAsset(asset: MediaAsset): boolean {
   return asset.category === 'intro' && HOOK_CLIP_NAME.test(asset.friendlyName);
 }
 
-/** First saved intro that is not an auto-generated hook segment. */
+/** Auto-generated hook montage or individual hook segments. */
+export function isAutoHookAsset(asset: MediaAsset): boolean {
+  return isHookMontageAsset(asset) || isHookClipAsset(asset);
+}
+
+/** First saved intro that is not an auto-generated hook asset. */
 export function findDefaultIntroAsset(
   mediaAssets: MediaAsset[],
   excludeIds: ReadonlySet<string> = new Set()
 ): MediaAsset | null {
   return (
     mediaAssets.find(
-      (a) => a.category === 'intro' && !excludeIds.has(a.id) && !isHookClipAsset(a)
+      (a) => a.category === 'intro' && !excludeIds.has(a.id) && !isAutoHookAsset(a)
     ) ?? null
   );
+}
+
+function hookAssetsForTimeline(hookAssets: MediaAsset[]): MediaAsset[] {
+  const montage = hookAssets.find(isHookMontageAsset);
+  if (montage) return [montage];
+  const segments = hookAssets.filter(isHookClipAsset);
+  if (segments.length > 0) return segments;
+  return hookAssets;
 }
 
 export function buildHookTimelineClips(
@@ -136,7 +155,7 @@ export function buildHookTimelineClips(
   let cursor = 0;
   const introClips: TimelineClip[] = [];
 
-  for (const asset of hookAssets) {
+  for (const asset of hookAssetsForTimeline(hookAssets)) {
     introClips.push({
       id: uuidv4(),
       assetId: asset.id,
