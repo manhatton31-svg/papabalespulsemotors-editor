@@ -136,7 +136,8 @@ function buildOverlayClips(
 
     const allowed =
       (track === 'broll' && include.broll) ||
-      ((track === 'intro' || track === 'outro') && include.introsOutros) ||
+      ((track === 'hook' || track === 'intro' || track === 'outro') &&
+        include.introsOutros) ||
       (track === 'diagram' && include.diagrams);
 
     if (!allowed) continue;

@@ -24,6 +24,7 @@ export function emptySelectedAssetIds(): Record<LibraryCategory, string | null> 
   return {
     broll: null,
     intro: null,
+    hook: null,
     outro: null,
     diagram: null,
   };
@@ -111,14 +112,38 @@ export async function hydrateProject(project: AnyPulseProject): Promise<{
   const mainVideoPath = normalized.mainVideoPath;
   const mainVideoUrl = mainVideoPath ? toAssetUrl(mainVideoPath) : null;
 
-  const mediaAssets: MediaAsset[] = normalized.mediaAssets.map((asset) => ({
-    ...asset,
-    category: asset.category ?? 'broll',
-    mediaType: asset.mediaType ?? 'video',
-    url: toAssetUrl(asset.filePath),
-  }));
+  const mediaAssets: MediaAsset[] = normalized.mediaAssets.map((asset) => {
+    let category = (asset.category ?? 'broll') as LibraryCategory;
+    if (category === 'intro' && /^Hook \d+$/.test(asset.friendlyName)) {
+      category = 'hook';
+    }
+    return {
+      ...asset,
+      category,
+      mediaType: asset.mediaType ?? 'video',
+      url: toAssetUrl(asset.filePath),
+    };
+  });
 
   let timelineClips = [...normalized.timelineClips].filter((c) => c.track !== 'timelapse');
+
+  const hookAssetIds = new Set(
+    mediaAssets.filter((a) => a.category === 'hook').map((a) => a.id)
+  );
+  const legacyHookAssetIds = new Set(
+    mediaAssets
+      .filter((a) => a.category === 'intro' && /^Hook \d+$/.test(a.friendlyName))
+      .map((a) => a.id)
+  );
+  timelineClips = timelineClips.map((clip) => {
+    if (
+      clip.track === 'intro' &&
+      (hookAssetIds.has(clip.assetId) || legacyHookAssetIds.has(clip.assetId))
+    ) {
+      return { ...clip, track: 'hook' };
+    }
+    return clip;
+  });
   const hasMain = timelineClips.some((c) => c.track === 'main');
   if (mainVideoPath && !hasMain) {
     timelineClips.unshift({

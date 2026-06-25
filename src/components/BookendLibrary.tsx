@@ -5,28 +5,16 @@ import type { MediaAsset } from '../types/project';
 import { Modal } from './Modal';
 import './IntrosOutrosPanel.css';
 
-interface IntrosOutrosPanelProps {
-  hasVideo: boolean;
-  introAssets: MediaAsset[];
-  outroAssets: MediaAsset[];
-  selectedAssetIds: { intro: string | null; outro: string | null };
-  isGeneratingHook: boolean;
-  onSelectAsset: (category: LibraryCategory, id: string) => void;
-  onRenameAsset: (category: LibraryCategory, id: string, name: string) => void;
-  onImportContent: (category: LibraryCategory) => void;
-  onGenerateHookPreview: () => void;
-}
-
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-interface BookendSectionProps {
+export interface BookendLibraryProps {
   title: string;
   icon: string;
-  category: 'intro' | 'outro';
+  category: Extract<LibraryCategory, 'intro' | 'outro'>;
   assets: MediaAsset[];
   selectedId: string | null;
   emptyHint: string;
@@ -35,7 +23,7 @@ interface BookendSectionProps {
   onImport: () => void;
 }
 
-function BookendSection({
+export function BookendLibrary({
   title,
   icon,
   category,
@@ -45,7 +33,7 @@ function BookendSection({
   onSelect,
   onRename,
   onImport,
-}: BookendSectionProps) {
+}: BookendLibraryProps) {
   const [renameModal, setRenameModal] = useState<{ id: string; name: string } | null>(null);
   const [previewAsset, setPreviewAsset] = useState<MediaAsset | null>(null);
 
@@ -171,67 +159,5 @@ function BookendSection({
         )}
       </Modal>
     </section>
-  );
-}
-
-export function IntrosOutrosPanel({
-  hasVideo,
-  introAssets,
-  outroAssets,
-  selectedAssetIds,
-  isGeneratingHook,
-  onSelectAsset,
-  onRenameAsset,
-  onImportContent,
-  onGenerateHookPreview,
-}: IntrosOutrosPanelProps) {
-  return (
-    <div className="intros-outros-panel">
-      <div className="intros-outros-toolbar">
-        <button
-          type="button"
-          className="btn btn-accent hook-preview-btn"
-          onClick={onGenerateHookPreview}
-          disabled={!hasVideo || isGeneratingHook}
-          title={
-            hasVideo
-              ? 'Analyze main video and place hook clips at the timeline start'
-              : 'Import a main video first'
-          }
-        >
-          {isGeneratingHook ? 'Generating hook…' : 'Generate Hook Preview'}
-        </button>
-        <span className="intros-outros-hint">
-          Drag intros and outros onto their tracks on the timeline
-        </span>
-        <p className="intros-outros-phase-note">Phase 2: AI-generated dynamic intros coming soon</p>
-      </div>
-
-      <div className="intros-outros-scroll">
-        <BookendSection
-          title="Intros"
-          icon="🎞"
-          category="intro"
-          assets={introAssets}
-          selectedId={selectedAssetIds.intro}
-          emptyHint="Generate a hook preview or import branded intro clips"
-          onSelect={(id) => onSelectAsset('intro', id)}
-          onRename={(id, name) => onRenameAsset('intro', id, name)}
-          onImport={() => onImportContent('intro')}
-        />
-
-        <BookendSection
-          title="Outros"
-          icon="🏁"
-          category="outro"
-          assets={outroAssets}
-          selectedId={selectedAssetIds.outro}
-          emptyHint="Import branded outro clips to drag onto the Outro track"
-          onSelect={(id) => onSelectAsset('outro', id)}
-          onRename={(id, name) => onRenameAsset('outro', id, name)}
-          onImport={() => onImportContent('outro')}
-        />
-      </div>
-    </div>
   );
 }

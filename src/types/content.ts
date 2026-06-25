@@ -1,27 +1,30 @@
 /** Categories backed by import libraries */
-export const LIBRARY_CATEGORIES = ['broll', 'intro', 'outro', 'diagram'] as const;
+export const LIBRARY_CATEGORIES = ['broll', 'intro', 'hook', 'outro', 'diagram'] as const;
 
 export type LibraryCategory = (typeof LIBRARY_CATEGORIES)[number];
 
 /** All overlay track types on the timeline */
-export const OVERLAY_TRACKS = ['intro', 'outro', 'broll', 'timelapse', 'diagram'] as const;
+export const OVERLAY_TRACKS = ['hook', 'intro', 'outro', 'broll', 'timelapse', 'diagram'] as const;
 
 export type OverlayTrack = (typeof OVERLAY_TRACKS)[number];
 
 export type TimelineTrack = 'main' | OverlayTrack;
 
 /** Sidebar panels — timelapse & diagram are tools, not import libraries */
-export type LeftPanel = 'broll' | 'introsOutros' | 'timelapse' | 'diagram';
+export type LeftPanel = 'broll' | 'intros' | 'hooks' | 'outros' | 'timelapse' | 'diagram';
 
 export const LEFT_NAV_PANELS: { id: LeftPanel; label: string; icon: string }[] = [
   { id: 'broll', label: 'B-Roll Library', icon: '🎬' },
-  { id: 'introsOutros', label: 'Intros & Outros', icon: '🎞' },
+  { id: 'intros', label: 'Intros', icon: '🎞' },
+  { id: 'hooks', label: 'Hooks', icon: '⚡' },
+  { id: 'outros', label: 'Outros', icon: '🏁' },
   { id: 'timelapse', label: 'Timelapse Tool', icon: '⏱' },
   { id: 'diagram', label: 'Build Diagram', icon: '📐' },
 ];
 
 /** Higher priority wins when multiple full-frame clips overlap. Diagram is PiP. */
-export const FULL_FRAME_PRIORITY: Record<'intro' | 'outro' | 'broll', number> = {
+export const FULL_FRAME_PRIORITY: Record<'hook' | 'intro' | 'outro' | 'broll', number> = {
+  hook: 45,
   intro: 40,
   outro: 35,
   broll: 30,
@@ -65,6 +68,18 @@ export const CONTENT_LIBRARY_CONFIG: Record<LibraryCategory, ContentLibraryConfi
     listIcon: '🎞',
     trackClass: 'intro',
   },
+  hook: {
+    category: 'hook',
+    label: 'Hooks',
+    shortLabel: 'Hook',
+    importLabel: 'Import Hook',
+    addLabel: 'Add at Insert Point',
+    emptyTitle: 'No hooks yet',
+    emptyHint: 'Generate a hook preview or import saved hook clips',
+    dragHint: 'Drag hooks onto the Hooks track',
+    listIcon: '⚡',
+    trackClass: 'hook',
+  },
   outro: {
     category: 'outro',
     label: 'Outros',
@@ -95,6 +110,7 @@ export const TRACK_DISPLAY_CONFIG: Record<
   OverlayTrack,
   { shortLabel: string; trackClass: string }
 > = {
+  hook: { shortLabel: 'Hooks', trackClass: 'hook' },
   intro: { shortLabel: 'Intro', trackClass: 'intro' },
   outro: { shortLabel: 'Outro', trackClass: 'outro' },
   broll: { shortLabel: 'B-Roll', trackClass: 'broll' },
@@ -122,6 +138,7 @@ export function getVisibleOverlayTracks(params: {
   const tracks: OverlayTrack[] = [];
   const has = (t: OverlayTrack) => params.clips.some((c) => c.track === t);
 
+  if (has('hook')) tracks.push('hook');
   if (has('intro')) tracks.push('intro');
   if (has('outro')) tracks.push('outro');
   if (has('broll')) tracks.push('broll');

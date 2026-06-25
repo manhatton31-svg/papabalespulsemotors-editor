@@ -49,7 +49,8 @@ export function computeExportDuration(params: {
 
     const allowed =
       (clip.track === 'broll' && include.broll) ||
-      ((clip.track === 'intro' || clip.track === 'outro') && include.introsOutros) ||
+      ((clip.track === 'hook' || clip.track === 'intro' || clip.track === 'outro') &&
+        include.introsOutros) ||
       (clip.track === 'diagram' && include.diagrams);
 
     if (!allowed) continue;

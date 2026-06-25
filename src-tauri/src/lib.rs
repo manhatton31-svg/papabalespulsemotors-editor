@@ -2498,6 +2498,7 @@ fn append_lead_in_audio_pad(filter: &mut String, lead_in: f64, input_label: &str
 
 fn overlay_track_priority(track: &str) -> i32 {
     match track {
+        "hook" => 4,
         "intro" => 3,
         "outro" => 2,
         "broll" => 1,

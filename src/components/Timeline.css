@@ -263,29 +263,36 @@
   opacity: 0.8;
 }
 
-.overview-clip-intro {
+.overview-clip-hook {
   top: 26px;
+  height: 5px;
+  background: linear-gradient(90deg, var(--clip-hook), #fbbf24);
+  opacity: 0.85;
+}
+
+.overview-clip-intro {
+  top: 32px;
   height: 5px;
   background: linear-gradient(90deg, var(--clip-intro), #a78bfa);
   opacity: 0.8;
 }
 
 .overview-clip-outro {
-  top: 32px;
+  top: 38px;
   height: 5px;
   background: linear-gradient(90deg, var(--clip-outro), #f472b6);
   opacity: 0.8;
 }
 
 .overview-clip-diagram {
-  top: 38px;
+  top: 44px;
   height: 5px;
   background: linear-gradient(90deg, var(--clip-diagram), #60a5fa);
   opacity: 0.8;
 }
 
 .overview-clip-timelapse {
-  top: 44px;
+  top: 50px;
   height: 5px;
   background: linear-gradient(90deg, var(--clip-timelapse), #a3e635);
   opacity: 0.8;
@@ -484,6 +491,16 @@
   );
 }
 
+.hook-track {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--track-hook) 0px,
+    var(--track-hook) 48px,
+    rgba(245, 158, 11, 0.08) 48px,
+    rgba(245, 158, 11, 0.08) 49px
+  );
+}
+
 .intro-track {
   background: repeating-linear-gradient(
     90deg,
@@ -548,6 +565,10 @@
 .overlay-clip {
   cursor: grab;
   z-index: 6;
+}
+
+.hook-clip {
+  background: linear-gradient(135deg, var(--clip-hook), #fbbf24);
 }
 
 .intro-clip {

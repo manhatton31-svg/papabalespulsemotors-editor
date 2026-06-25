@@ -11,7 +11,7 @@ export function ImportProgressBanner({ progress }: ImportProgressBannerProps) {
     progress.phase === 'stitching'
       ? `Crossfade transitions (${progress.clipCount} clips) — you can keep using the editor`
       : progress.phase === 'generating-hook'
-        ? 'Finding the best moments and placing hooks on your Intro track'
+        ? 'Finding the best moments and placing hooks on your Hooks track'
         : null;
 
   return (

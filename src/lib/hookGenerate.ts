@@ -90,12 +90,10 @@ export async function extractHookClipsFromVideo(
   return waitForHookPreviewJob(jobId, onProgress);
 }
 
-export const HOOK_MONTAGE_NAME = 'Hook Preview';
-
 const HOOK_CLIP_NAME = /^Hook \d+$/;
 
 function hookClipNumber(name: string): number {
-  const match = name.match(/^Hook (\d+)$/);
+  const match = name.match(HOOK_CLIP_NAME);
   return match ? Number.parseInt(match[1], 10) : Number.MAX_SAFE_INTEGER;
 }
 
@@ -108,15 +106,13 @@ export async function generateHookPreviewAssets(
     .filter((clip) => HOOK_CLIP_NAME.test(clip.friendlyName))
     .sort((a, b) => hookClipNumber(a.friendlyName) - hookClipNumber(b.friendlyName));
 
-  const timelineClips = segmentClips.length > 0 ? segmentClips : clips;
-
-  if (timelineClips.length === 0) {
+  if (segmentClips.length === 0) {
     throw new Error('Could not extract hook clips from this video');
   }
 
   return addToContentLibrary(
-    'intro',
-    timelineClips.map((clip) => ({
+    'hook',
+    segmentClips.map((clip) => ({
       filePath: clip.filePath,
       friendlyName: clip.friendlyName,
       duration: clip.duration,
@@ -124,39 +120,31 @@ export async function generateHookPreviewAssets(
   );
 }
 
-export function isHookMontageAsset(asset: MediaAsset): boolean {
-  return asset.category === 'intro' && asset.friendlyName === HOOK_MONTAGE_NAME;
-}
-
 export function isHookClipAsset(asset: MediaAsset): boolean {
-  return asset.category === 'intro' && HOOK_CLIP_NAME.test(asset.friendlyName);
+  return asset.category === 'hook' && HOOK_CLIP_NAME.test(asset.friendlyName);
 }
 
-/** Auto-generated hook montage or individual hook segments. */
+/** Auto-generated or imported hook library clips. */
 export function isAutoHookAsset(asset: MediaAsset): boolean {
-  return isHookMontageAsset(asset) || isHookClipAsset(asset);
+  return asset.category === 'hook';
 }
 
-/** First saved intro that is not an auto-generated hook asset. */
+/** First saved intro that is not a hook. */
 export function findDefaultIntroAsset(
   mediaAssets: MediaAsset[],
   excludeIds: ReadonlySet<string> = new Set()
 ): MediaAsset | null {
   return (
     mediaAssets.find(
-      (a) => a.category === 'intro' && !excludeIds.has(a.id) && !isAutoHookAsset(a)
+      (a) => a.category === 'intro' && !excludeIds.has(a.id)
     ) ?? null
   );
 }
 
 function hookAssetsForTimeline(hookAssets: MediaAsset[]): MediaAsset[] {
-  const segments = hookAssets
+  return hookAssets
     .filter(isHookClipAsset)
-    .sort(
-      (a, b) => hookClipNumber(a.friendlyName) - hookClipNumber(b.friendlyName)
-    );
-  if (segments.length > 0) return segments;
-  return hookAssets.filter((asset) => !isHookMontageAsset(asset));
+    .sort((a, b) => hookClipNumber(a.friendlyName) - hookClipNumber(b.friendlyName));
 }
 
 export function buildHookTimelineClips(
@@ -164,23 +152,25 @@ export function buildHookTimelineClips(
   existingClips: TimelineClip[],
   defaultIntroAsset?: MediaAsset | null
 ): TimelineClip[] {
-  const withoutIntros = existingClips.filter((c) => c.track !== 'intro');
+  const withoutLeadIn = existingClips.filter(
+    (c) => c.track !== 'hook' && c.track !== 'intro'
+  );
   let cursor = 0;
-  const introClips: TimelineClip[] = [];
+  const leadInClips: TimelineClip[] = [];
 
   for (const asset of hookAssetsForTimeline(hookAssets)) {
-    introClips.push({
+    leadInClips.push({
       id: uuidv4(),
       assetId: asset.id,
       startTime: cursor,
       duration: asset.duration,
-      track: 'intro',
+      track: 'hook',
     });
     cursor += asset.duration;
   }
 
   if (defaultIntroAsset) {
-    introClips.push({
+    leadInClips.push({
       id: uuidv4(),
       assetId: defaultIntroAsset.id,
       startTime: cursor,
@@ -191,12 +181,12 @@ export function buildHookTimelineClips(
   }
 
   const mainOffset = cursor;
-  const shiftedOthers = withoutIntros.map((clip) => {
+  const shiftedOthers = withoutLeadIn.map((clip) => {
     if (clip.track === 'main') {
       return { ...clip, startTime: mainOffset };
     }
     return clip;
   });
 
-  return [...introClips, ...shiftedOthers];
+  return [...leadInClips, ...shiftedOthers];
 }

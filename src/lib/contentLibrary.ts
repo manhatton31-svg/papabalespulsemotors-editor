@@ -140,7 +140,38 @@ export async function loadCategoryLibrary(category: LibraryCategory): Promise<Me
   return hydrated;
 }
 
+const LEGACY_HOOK_NAME = /^(Hook \d+|Hook Preview)$/;
+
+/** Move auto-generated hooks that were saved under intro into the hook library. */
+async function migrateIntroHooksToHookLibrary(): Promise<void> {
+  const introLibrary = await readCategoryLibrary('intro');
+  const hookLibrary = await readCategoryLibrary('hook');
+  const hookPaths = new Set(hookLibrary.clips.map((c) => normalizePathKey(c.filePath)));
+
+  const toMove = introLibrary.clips.filter((clip) => LEGACY_HOOK_NAME.test(clip.friendlyName));
+  if (toMove.length === 0) return;
+
+  introLibrary.clips = introLibrary.clips.filter(
+    (clip) => !LEGACY_HOOK_NAME.test(clip.friendlyName)
+  );
+
+  for (const clip of toMove) {
+    const key = normalizePathKey(clip.filePath);
+    if (hookPaths.has(key)) continue;
+    hookLibrary.clips.push({
+      ...clip,
+      category: 'hook',
+    });
+    hookPaths.add(key);
+  }
+
+  await writeCategoryLibrary('intro', introLibrary);
+  await writeCategoryLibrary('hook', hookLibrary);
+}
+
 export async function loadAllContentLibraries(): Promise<MediaAsset[]> {
+  await migrateIntroHooksToHookLibrary();
+
   const all: MediaAsset[] = [];
   for (const category of LIBRARY_CATEGORIES) {
     const assets = await loadCategoryLibrary(category);
@@ -233,6 +264,16 @@ export async function toggleBrollFavorite(id: string): Promise<boolean | null> {
   const next = !library.clips[idx].favorite;
   library.clips[idx].favorite = next;
   await writeCategoryLibrary('broll', library);
+  return next;
+}
+
+export async function toggleHookFavorite(id: string): Promise<boolean | null> {
+  const library = await readCategoryLibrary('hook');
+  const idx = library.clips.findIndex((c) => c.id === id);
+  if (idx < 0) return null;
+  const next = !library.clips[idx].favorite;
+  library.clips[idx].favorite = next;
+  await writeCategoryLibrary('hook', library);
   return next;
 }
 

@@ -200,11 +200,12 @@ export function ExportSettingsModal({
                 <input
                   type="checkbox"
                   checked={include.introsOutros}
+                  aria-label="Include hooks, intros, and outros"
                   onChange={(e) =>
                     setInclude((prev) => ({ ...prev, introsOutros: e.target.checked }))
                   }
                 />
-                Intros / Outros
+                Hooks / Intros / Outros
               </label>
               <label className="export-check">
                 <input

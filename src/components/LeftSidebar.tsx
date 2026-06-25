@@ -1,7 +1,9 @@
 import React from 'react';
 import { BRollLibrary } from './BRollLibrary';
 import { DiagramPanel } from './DiagramPanel';
-import { IntrosOutrosPanel } from './IntrosOutrosPanel';
+import { HooksLibrary } from './HooksLibrary';
+import { IntrosPanel } from './IntrosPanel';
+import { OutrosPanel } from './OutrosPanel';
 import { TimelapsePanel } from './TimelapsePanel';
 import { LEFT_NAV_PANELS, type LeftPanel } from '../types/content';
 import type { LibraryCategory } from '../types/content';
@@ -31,6 +33,7 @@ interface LeftSidebarProps {
   onImportContent: (category: LibraryCategory) => void;
   onAddAtPlayhead: (category: LibraryCategory) => void;
   onToggleBrollFavorite: (id: string) => void;
+  onToggleHookFavorite: (id: string) => void;
   onToggleTimelapseMode: () => void;
   onTimelapseSpeedChange: (speed: TimelapseSpeed) => void;
   onRemoveTimelapseSegment: (id: string) => void;
@@ -60,6 +63,7 @@ export function LeftSidebar({
   onImportContent,
   onAddAtPlayhead,
   onToggleBrollFavorite,
+  onToggleHookFavorite,
   onToggleTimelapseMode,
   onTimelapseSpeedChange,
   onRemoveTimelapseSegment,
@@ -80,6 +84,7 @@ export function LeftSidebar({
       !mainSourcePaths.has(a.filePath.replace(/\\/g, '/').toLowerCase())
   );
   const introAssets = mediaAssets.filter((a) => a.category === 'intro');
+  const hookAssets = mediaAssets.filter((a) => a.category === 'hook');
   const outroAssets = mediaAssets.filter((a) => a.category === 'outro');
   const diagramAssets = mediaAssets.filter((a) => a.category === 'diagram');
 
@@ -112,20 +117,37 @@ export function LeftSidebar({
             onAddAtPlayhead={() => onAddAtPlayhead('broll')}
           />
         )}
-        {activePanel === 'introsOutros' && (
-          <IntrosOutrosPanel
-            hasVideo={hasVideo}
+        {activePanel === 'intros' && (
+          <IntrosPanel
             introAssets={introAssets}
-            outroAssets={outroAssets}
-            selectedAssetIds={{
-              intro: selectedAssetIds.intro,
-              outro: selectedAssetIds.outro,
-            }}
+            selectedId={selectedAssetIds.intro}
+            onSelect={(id) => onSelectAsset('intro', id)}
+            onRename={(id, name) => onRenameAsset('intro', id, name)}
+            onImport={() => onImportContent('intro')}
+          />
+        )}
+        {activePanel === 'hooks' && (
+          <HooksLibrary
+            assets={hookAssets}
+            selectedId={selectedAssetIds.hook}
+            hasVideo={hasVideo}
             isGeneratingHook={isGeneratingHook}
-            onSelectAsset={onSelectAsset}
-            onRenameAsset={onRenameAsset}
-            onImportContent={onImportContent}
+            playheadReady={playheadReady}
+            onSelect={(id) => onSelectAsset('hook', id)}
+            onRename={(id, name) => onRenameAsset('hook', id, name)}
+            onToggleFavorite={onToggleHookFavorite}
+            onAddAtPlayhead={() => onAddAtPlayhead('hook')}
+            onImport={() => onImportContent('hook')}
             onGenerateHookPreview={onGenerateHookPreview}
+          />
+        )}
+        {activePanel === 'outros' && (
+          <OutrosPanel
+            outroAssets={outroAssets}
+            selectedId={selectedAssetIds.outro}
+            onSelect={(id) => onSelectAsset('outro', id)}
+            onRename={(id, name) => onRenameAsset('outro', id, name)}
+            onImport={() => onImportContent('outro')}
           />
         )}
         {activePanel === 'timelapse' && (

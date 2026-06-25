@@ -11,6 +11,7 @@ import {
   recordBrollUsage,
   renameContentAsset,
   toggleBrollFavorite,
+  toggleHookFavorite,
 } from './lib/contentLibrary';
 import { generateDiagramFromVideo } from './lib/diagramGenerate';
 import {
@@ -279,13 +280,13 @@ export default function App() {
       setTimelineClips((prev) => {
         const base = baseClips.length > 0 ? baseClips : prev;
         const next = buildHookTimelineClips(hookAssets, base, defaultIntroAsset);
-        const firstIntro = next.find((c) => c.track === 'intro');
-        if (firstIntro) setSelectedClipId(firstIntro.id);
+        const firstHook = next.find((c) => c.track === 'hook');
+        if (firstHook) setSelectedClipId(firstHook.id);
         return next;
       });
       const firstHookAsset = hookAssets.find(isHookClipAsset) ?? hookAssets[0];
       if (firstHookAsset) {
-        setSelectedAssetIds((prev) => ({ ...prev, intro: firstHookAsset.id }));
+        setSelectedAssetIds((prev) => ({ ...prev, hook: firstHookAsset.id }));
       }
       setPlayhead(0);
       setPlayheadEngaged(false);
@@ -371,8 +372,8 @@ export default function App() {
         const defaultIntro = findDefaultIntroAsset(libraryBeforeHook);
         setMediaAssets((prev) => mergeMediaAssets(prev, hookAssets));
         applyHookPreviewResult(hookAssets, [mainClip], defaultIntro);
-        setLeftPanel('introsOutros');
-        showStatus('Hook preview ready — hooks placed on Intro track');
+        setLeftPanel('hooks');
+        showStatus('Hook preview ready — hooks placed on Hooks track');
       } catch (hookErr) {
         const hookMessage =
           hookErr instanceof Error ? hookErr.message : 'Hook preview could not be generated';
@@ -518,6 +519,14 @@ export default function App() {
     );
   }, []);
 
+  const handleToggleHookFavorite = useCallback(async (id: string) => {
+    const next = await toggleHookFavorite(id);
+    if (next === null) return;
+    setMediaAssets((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, favorite: next } : a))
+    );
+  }, []);
+
   const handleAddAtPlayhead = (category: LibraryCategory) => {
     const selectedId = selectedAssetIds[category];
     if (!selectedId) {
@@ -565,9 +574,8 @@ export default function App() {
       setPlayhead(0);
       setIsPlaying(false);
       setPlaybackResetKey((k) => k + 1);
-      setLeftPanel('introsOutros');
-      setLeftPanel('introsOutros');
-      showStatus('Hook preview ready — hooks placed on Intro track');
+      setLeftPanel('hooks');
+      showStatus('Hook preview ready — hooks placed on Hooks track');
     } catch (err) {
       showStatus(`Hook preview failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -1004,6 +1012,7 @@ export default function App() {
           onImportContent={handleImportContent}
           onAddAtPlayhead={handleAddAtPlayhead}
           onToggleBrollFavorite={handleToggleBrollFavorite}
+          onToggleHookFavorite={handleToggleHookFavorite}
           onToggleTimelapseMode={handleToggleTimelapseMode}
           onTimelapseSpeedChange={setTimelapseSpeed}
           onRemoveTimelapseSegment={(id) =>

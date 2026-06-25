@@ -130,6 +130,8 @@ function importTitleForCategory(category: LibraryCategory): string {
       return 'Import B-Roll';
     case 'intro':
       return 'Import Intro';
+    case 'hook':
+      return 'Import Hook';
     case 'outro':
       return 'Import Outro';
     case 'diagram':
