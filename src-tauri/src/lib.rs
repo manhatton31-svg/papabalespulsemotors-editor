@@ -111,32 +111,6 @@ fn tool_command(tool: &str) -> Result<Command, String> {
     Ok(Command::new(path))
 }
 
-fn run_tool_status(
-    tool: &str,
-    args: &[&str],
-    failure_message: &str,
-    idle_priority: bool,
-) -> Result<(), String> {
-    let mut command = tool_command(tool)?;
-    configure_low_priority(&mut command, idle_priority);
-    let output = command
-        .args(args)
-        .output()
-        .map_err(|e| format!("Failed to run {tool}: {e}"))?;
-
-    if output.status.success() {
-        return Ok(());
-    }
-
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let detail = stderr
-        .lines()
-        .rev()
-        .find(|line| !line.trim().is_empty())
-        .unwrap_or("unknown error");
-    Err(format!("{failure_message}: {detail}"))
-}
-
 /// Write to a sidecar path so the destination folder never contains a half-written MP4.
 fn temp_export_path(output_path: &str) -> String {
     format!("{output_path}.exporting.mp4")
@@ -260,15 +234,6 @@ fn emit_bake_progress(
             message: message.map(str::to_string),
         },
     );
-}
-
-/// Leave CPU headroom for preview bake — modest thread cap.
-fn ffmpeg_thread_limit() -> String {
-    let cores = std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(4);
-    let threads = (cores / 2).max(1).min(4);
-    threads.to_string()
 }
 
 /// Export uses most cores — below-normal priority keeps the UI responsive.
@@ -1304,7 +1269,6 @@ const HOOK_SEGMENT_MIN_SECS: f64 = 3.0;
 const HOOK_SEGMENT_MAX_SECS: f64 = 7.0;
 const HOOK_CLIP_COUNT: usize = 4;
 const HOOK_CROSSFADE_SECS: f64 = 0.5;
-const HOOK_MONTAGE_NAME: &str = "Hook Preview";
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum HookRole {
@@ -1337,8 +1301,6 @@ struct PlannedHookSegment {
     start: f64,
     end: f64,
     role: HookRole,
-    speech_ratio: f64,
-    motion_score: f64,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -1535,7 +1497,7 @@ fn score_hook_candidate(
     role: HookRole,
     speech: &[TimeRange],
     scene_times: &[f64],
-) -> (f64, f64, f64) {
+) -> f64 {
     let start = (center - seg_duration * 0.5)
         .max(0.0)
         .min((duration - seg_duration).max(0.0));
@@ -1565,7 +1527,7 @@ fn score_hook_candidate(
         HookRole::Payoff => motion * 0.40 + speech_ratio * 0.40 + position * 0.20,
     } - silence_penalty;
 
-    (score, speech_ratio, motion)
+    score
 }
 
 fn segments_too_close(a: &PlannedHookSegment, start: f64, end: f64, min_gap: f64) -> bool {
@@ -1577,200 +1539,6 @@ fn segments_too_close(a: &PlannedHookSegment, start: f64, end: f64, min_gap: f64
         -1.0
     };
     gap < min_gap
-}
-
-fn transition_text_between(from: &PlannedHookSegment, to: &PlannedHookSegment) -> String {
-    const TEASER_SETUP: &[&str] = &[
-        "The key insight…",
-        "Here's what matters",
-        "Now watch closely",
-    ];
-    const SETUP_INSIGHT: &[&str] = &[
-        "Watch what happens next",
-        "Most people miss this",
-        "This is the tricky part",
-    ];
-    const INSIGHT_PAYOFF: &[&str] = &[
-        "This is where it clicks",
-        "Here's the breakthrough",
-        "See it in action",
-    ];
-
-    let pool: &[&str] = match (from.role, to.role) {
-        (HookRole::Teaser, HookRole::Setup) => TEASER_SETUP,
-        (HookRole::Setup, HookRole::Insight) => SETUP_INSIGHT,
-        (HookRole::Insight, HookRole::Payoff) => INSIGHT_PAYOFF,
-        _ => &["Keep watching…"],
-    };
-
-    let mut idx =
-        ((from.start * 17.0 + to.end * 31.0 + from.speech_ratio * 100.0) as usize) % pool.len();
-    let mut text = pool[idx].to_string();
-
-    if to.speech_ratio > 0.55 && matches!(to.role, HookRole::Setup | HookRole::Insight) {
-        text = "Listen to this part".to_string();
-        idx = 0;
-    }
-    if to.motion_score > 0.65 && to.role == HookRole::Payoff {
-        text = "Watch what happens next".to_string();
-    }
-    if from.speech_ratio > 0.5 && to.motion_score > 0.5 && to.role == HookRole::Payoff {
-        text = "Here's the breakthrough".to_string();
-    }
-
-    let words: Vec<&str> = text.split_whitespace().collect();
-    if words.len() > 8 {
-        text = words[..8].join(" ");
-    }
-
-    let _ = idx;
-    text
-}
-
-fn hook_transition_start_times(durations: &[f64], crossfade: f64) -> Vec<f64> {
-    let mut times = Vec::new();
-    for index in 1..durations.len() {
-        let offset: f64 = durations[..index].iter().sum::<f64>() - index as f64 * crossfade;
-        times.push(offset.max(0.0));
-    }
-    times
-}
-
-fn resolve_hook_overlay_font() -> String {
-    #[cfg(windows)]
-    {
-        return "C\\\\:/Windows/Fonts/segoeui.ttf".to_string();
-    }
-    #[cfg(target_os = "macos")]
-    {
-        return "/System/Library/Fonts/Supplemental/Arial Bold.ttf".to_string();
-    }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        return "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf".to_string();
-    }
-    #[allow(unreachable_code)]
-    "sans".to_string()
-}
-
-fn escape_drawtext_text(text: &str) -> String {
-    text.replace('\\', "\\\\")
-        .replace(':', "\\:")
-        .replace('\'', "\\'")
-        .replace('%', "\\%")
-}
-
-fn append_drawtext_overlay(
-    filter: &mut String,
-    input_label: &str,
-    output_label: &str,
-    text: &str,
-    t_start: f64,
-    t_end: f64,
-    font: &str,
-) {
-    let escaped = escape_drawtext_text(text);
-    let fade = 0.12_f64.min((t_end - t_start) * 0.25);
-    let fade_in_end = t_start + fade;
-    let fade_out_start = t_end - fade;
-    filter.push_str(&format!(
-        "[{input_label}]drawtext=fontfile={font}:text='{escaped}':fontsize=42:fontcolor=white:borderw=2:bordercolor=black@0.65:box=1:boxcolor=black@0.5:boxborderw=14:x=(w-text_w)/2:y=h*0.12:enable='between(t,{t_start:.3},{t_end:.3})':alpha='if(lt(t,{fade_in_end:.3}),(t-{t_start:.3})/{fade:.3},if(lt(t,{fade_out_start:.3}),1,({t_end:.3}-t)/{fade:.3}))'[{output_label}];"
-    ));
-}
-
-fn build_hook_montage_filter(
-    durations: &[f64],
-    transitions: &[String],
-    crossfade: f64,
-) -> (String, String, String) {
-    let xfade = build_phone_stitch_filter(durations, crossfade);
-    if transitions.is_empty() {
-        return (xfade, "vout".to_string(), "aout".to_string());
-    }
-
-    let font = resolve_hook_overlay_font();
-    let transition_starts = hook_transition_start_times(durations, crossfade);
-    let mut filter = xfade;
-    let mut video_label = "vout".to_string();
-
-    for (index, text) in transitions.iter().enumerate() {
-        let t_start = transition_starts[index];
-        let t_end = t_start + crossfade;
-        let out_label = if index == transitions.len() - 1 {
-            "vfinal".to_string()
-        } else {
-            format!("vt{index}")
-        };
-        append_drawtext_overlay(
-            &mut filter,
-            &video_label,
-            &out_label,
-            text,
-            t_start,
-            t_end,
-            &font,
-        );
-        video_label = out_label;
-    }
-
-    let final_video = if video_label == "vout" {
-        "vout".to_string()
-    } else {
-        video_label
-    };
-    (filter, final_video, "aout".to_string())
-}
-
-fn stitch_hook_montage(
-    segment_paths: &[String],
-    durations: &[f64],
-    transitions: &[String],
-    output_path: &str,
-) -> Result<(), String> {
-    if segment_paths.is_empty() {
-        return Err("No hook segments to stitch".into());
-    }
-    if segment_paths.len() == 1 {
-        fs::copy(&segment_paths[0], output_path).map_err(|e| e.to_string())?;
-        return Ok(());
-    }
-
-    let crossfade = HOOK_CROSSFADE_SECS;
-    let (filter, video_out, audio_out) =
-        build_hook_montage_filter(durations, transitions, crossfade);
-    let video_map = format!("[{video_out}]");
-    let audio_map = format!("[{audio_out}]");
-
-    let mut args = vec!["-y", "-hide_banner", "-nostdin"];
-    for path in segment_paths {
-        args.push("-i");
-        args.push(path.as_str());
-    }
-    args.extend([
-        "-filter_complex",
-        &filter,
-        "-map",
-        &video_map,
-        "-map",
-        &audio_map,
-        "-c:v",
-        "libx264",
-        "-preset",
-        "fast",
-        "-crf",
-        "23",
-        "-pix_fmt",
-        "yuv420p",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "192k",
-        "-movflags",
-        "+faststart",
-        output_path,
-    ]);
-
-    run_ffmpeg_simple(&args, "Failed to stitch hook montage", false)
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -1948,8 +1716,6 @@ fn plan_hook_segment_ranges(
             start: 0.0,
             end: duration,
             role: HookRole::Teaser,
-            speech_ratio: speech_ratio_in_window(speech, 0.0, duration),
-            motion_score: motion_score_in_window(scene_times, 0.0, duration),
         }];
     }
 
@@ -1994,7 +1760,7 @@ fn plan_hook_segment_ranges(
                 continue;
             }
 
-            let (score, speech_ratio, motion) =
+            let score =
                 score_hook_candidate(center, seg_duration, duration, role, speech, scene_times);
             if score > best_score {
                 best_score = score;
@@ -2002,8 +1768,6 @@ fn plan_hook_segment_ranges(
                     start,
                     end,
                     role,
-                    speech_ratio,
-                    motion_score: motion,
                 });
             }
         }
@@ -2019,8 +1783,6 @@ fn plan_hook_segment_ranges(
             start: 0.0,
             end,
             role: HookRole::Teaser,
-            speech_ratio: speech_ratio_in_window(speech, 0.0, end),
-            motion_score: motion_score_in_window(scene_times, 0.0, end),
         }];
     }
 
@@ -2929,219 +2691,6 @@ fn export_stream_copy(
         0.0,
         95.0,
     )
-}
-
-fn export_segmented_base_video(
-    app: &tauri::AppHandle,
-    job_id: &str,
-    cancel: &AtomicBool,
-    input_path: &str,
-    parts: &[TimelinePart],
-    output_path: &str,
-    work_dir: &PathBuf,
-    out_duration: f64,
-    profile: &ExportEncodeProfile,
-) -> Result<(), String> {
-    if work_dir.exists() {
-        let _ = fs::remove_dir_all(work_dir);
-    }
-    fs::create_dir_all(work_dir).map_err(|e| e.to_string())?;
-
-    let thread_limit = ffmpeg_thread_limit_export();
-    let mut concat_lines = String::new();
-    let mut completed_out = 0.0;
-    let start = Instant::now();
-
-    emit_export_progress(
-        app,
-        job_id,
-        0.0,
-        0,
-        "running",
-        Some("Preparing segments"),
-    );
-
-    for (i, part) in parts.iter().enumerate() {
-        check_export_cancel(cancel)?;
-
-        let segment_path = work_dir.join(format!("segment_{i:03}.mp4"));
-        let segment_str = segment_path.to_string_lossy().into_owned();
-        let part_out = part_output_duration(part);
-        let encoded_timelapse = !is_unit_speed(part.speed);
-
-        if is_unit_speed(part.speed) {
-            let ss = format!("{:.3}", part.start);
-            let to = format!("{:.3}", part.end);
-            run_ffmpeg_simple(
-                &[
-                    "-y",
-                    "-hide_banner",
-                    "-nostdin",
-                    "-ss",
-                    &ss,
-                    "-to",
-                    &to,
-                    "-i",
-                    input_path,
-                    "-map",
-                    "0:v:0?",
-                    "-an",
-                    "-c:v",
-                    "copy",
-                    "-avoid_negative_ts",
-                    "make_zero",
-                    &segment_str,
-                ],
-                "Failed to copy timeline segment",
-                false,
-            )?;
-        } else {
-            let ss = format!("{:.3}", part.start);
-            let to = format!("{:.3}", part.end);
-            let vf = format!("setpts=PTS-STARTPTS,setpts=PTS/{:.4}", part.speed);
-            let speed_label = format!("{:.0}", part.speed);
-            let encode_msg = format!("Encoding timelapse {speed_label}× segment");
-            let thread_limit_ref = thread_limit.as_str();
-            run_ffmpeg_export_encode(
-                app,
-                job_id,
-                cancel,
-                &[
-                    "-y",
-                    "-hide_banner",
-                    "-nostdin",
-                    "-ss",
-                    &ss,
-                    "-to",
-                    &to,
-                    "-i",
-                    input_path,
-                    "-an",
-                    "-vf",
-                    &vf,
-                    "-c:v",
-                    "libx264",
-                    "-preset",
-                    profile.preset,
-                    "-crf",
-                    profile.crf,
-                    "-pix_fmt",
-                    "yuv420p",
-                    "-threads",
-                    thread_limit_ref,
-                    &segment_str,
-                ],
-                "Failed to encode timelapse segment",
-                part_out,
-                completed_out,
-                out_duration,
-                start,
-                &encode_msg,
-                0.0,
-                75.0,
-            )?;
-        }
-
-        completed_out += part_out;
-        let pct = if out_duration > 0.0 {
-            (completed_out / out_duration * 75.0).clamp(0.0, 75.0)
-        } else {
-            0.0
-        };
-        emit_export_progress(
-            app,
-            job_id,
-            pct,
-            start.elapsed().as_millis() as u64,
-            "running",
-            Some(if encoded_timelapse {
-                "Timelapse segment done"
-            } else {
-                "Copied segment"
-            }),
-        );
-
-        concat_lines.push_str(&format!(
-            "file '{}'\n",
-            concat_list_path(&segment_str)
-        ));
-    }
-
-    check_export_cancel(cancel)?;
-
-    let list_file = work_dir.join("concat_list.txt");
-    fs::write(&list_file, concat_lines).map_err(|e| e.to_string())?;
-    let list_str = list_file.to_string_lossy().into_owned();
-
-    let concat_copy = run_ffmpeg_export_encode(
-        app,
-        job_id,
-        cancel,
-        &[
-            "-y",
-            "-hide_banner",
-            "-nostdin",
-            "-f",
-            "concat",
-            "-safe",
-            "0",
-            "-i",
-            &list_str,
-            "-an",
-            "-c:v",
-            "copy",
-            output_path,
-        ],
-        "Failed to concat export segments",
-        out_duration,
-        0.0,
-        out_duration,
-        start,
-        "Joining segments",
-        75.0,
-        15.0,
-    );
-
-    if concat_copy.is_err() {
-        run_ffmpeg_export_encode(
-            app,
-            job_id,
-            cancel,
-            &[
-                "-y",
-                "-hide_banner",
-                "-nostdin",
-                "-f",
-                "concat",
-                "-safe",
-                "0",
-                "-i",
-                &list_str,
-                "-an",
-                "-c:v",
-                "libx264",
-                "-preset",
-                "ultrafast",
-                "-crf",
-                "23",
-                "-pix_fmt",
-                "yuv420p",
-                "-threads",
-                &thread_limit,
-                output_path,
-            ],
-            "Failed to concat export segments (fallback encode)",
-            out_duration,
-            0.0,
-            out_duration,
-            start,
-            "Joining segments (re-encode)",
-            75.0,
-            15.0,
-        )?;
-    }
-
-    Ok(())
 }
 
 fn export_with_filter_graph(
