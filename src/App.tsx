@@ -342,7 +342,15 @@ export default function App() {
 
         setIsGeneratingHook(true);
         try {
-          const hookAssets = await generateHookPreviewAssets(mainVideo.filePath);
+          const hookAssets = await generateHookPreviewAssets(mainVideo.filePath, (event) => {
+            if (event.message) {
+              setImportPipelineProgress({
+                phase: 'generating-hook',
+                message: event.message,
+                clipCount,
+              });
+            }
+          });
           const defaultIntro = findDefaultIntroAsset(libraryBeforeHook);
           setMediaAssets((prev) => mergeMediaAssets(prev, hookAssets));
           applyHookPreviewResult(hookAssets, [mainClip], defaultIntro);
@@ -537,7 +545,9 @@ export default function App() {
     }
     setIsGeneratingHook(true);
     try {
-      const hookAssets = await generateHookPreviewAssets(mainVideoPath);
+      const hookAssets = await generateHookPreviewAssets(mainVideoPath, (event) => {
+        if (event.message) showStatus(event.message);
+      });
       setMediaAssets((prev) => mergeMediaAssets(prev, hookAssets));
       applyHookPreviewResult(hookAssets, [], null);
       setPlayhead(0);

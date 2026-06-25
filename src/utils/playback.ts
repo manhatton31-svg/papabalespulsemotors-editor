@@ -75,3 +75,20 @@ export function clampTime(time: number, duration: number): number {
 export function localTimeInClip(globalTime: number, clip: TimelineClip): number {
   return Math.max(0, globalTime - clip.startTime);
 }
+
+/** Next full-frame overlay clip immediately after a boundary (e.g. end of prior hook). */
+export function getFullFrameClipAfterBoundary(
+  boundaryTime: number,
+  clips: TimelineClip[],
+  assets: MediaAsset[]
+): ActiveMediaClip | null {
+  return getActiveFullFrameAt(boundaryTime + 0.001, clips, assets);
+}
+
+export function isSequentialOverlayHandoff(
+  boundaryTime: number,
+  next: ActiveMediaClip | null
+): next is ActiveMediaClip {
+  if (!next) return false;
+  return next.clip.startTime <= boundaryTime + 0.05;
+}

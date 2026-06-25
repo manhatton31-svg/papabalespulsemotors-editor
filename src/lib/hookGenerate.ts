@@ -1,4 +1,5 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { v4 as uuidv4 } from 'uuid';
 import { addToContentLibrary } from './contentLibrary';
 import type { MediaAsset, TimelineClip } from '../types/project';
@@ -9,20 +10,91 @@ export interface HookClipResult {
   friendlyName: string;
 }
 
-export async function extractHookClipsFromVideo(mainVideoPath: string): Promise<HookClipResult[]> {
+export interface HookPreviewProgress {
+  jobId: string;
+  progress: number;
+  status: string;
+  message?: string;
+}
+
+export interface HookPreviewComplete {
+  jobId: string;
+  clips: HookClipResult[];
+  status: string;
+  message?: string;
+}
+
+function waitForHookPreviewJob(
+  jobId: string,
+  onProgress?: (event: HookPreviewProgress) => void
+): Promise<HookClipResult[]> {
+  return new Promise((resolve, reject) => {
+    let unlistenProgress: UnlistenFn | undefined;
+    let unlistenComplete: UnlistenFn | undefined;
+    let settled = false;
+
+    const cleanup = () => {
+      unlistenProgress?.();
+      unlistenComplete?.();
+    };
+
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      fn();
+    };
+
+    listen<HookPreviewProgress>('hook-preview-progress', (payload) => {
+      if (payload.payload.jobId !== jobId) return;
+      onProgress?.(payload.payload);
+    })
+      .then((fn) => {
+        unlistenProgress = fn;
+      })
+      .catch(() => {});
+
+    listen<HookPreviewComplete>('hook-preview-complete', (payload) => {
+      if (payload.payload.jobId !== jobId) return;
+      const event = payload.payload;
+      if (event.status === 'completed') {
+        finish(() => resolve(event.clips));
+      } else {
+        finish(() => reject(new Error(event.message ?? 'Hook preview failed')));
+      }
+    })
+      .then((fn) => {
+        unlistenComplete = fn;
+      })
+      .catch(() => {
+        finish(() => reject(new Error('Could not listen for hook preview completion')));
+      });
+  });
+}
+
+export async function extractHookClipsFromVideo(
+  mainVideoPath: string,
+  onProgress?: (event: HookPreviewProgress) => void
+): Promise<HookClipResult[]> {
   if (!isTauri()) {
     throw new Error('Hook preview requires the desktop app');
   }
   if (!mainVideoPath) {
     throw new Error('Load a main video first');
   }
-  return invoke<HookClipResult[]>('generate_hook_preview', { mainPath: mainVideoPath });
+
+  const { jobId } = await invoke<{ jobId: string }>('start_generate_hook_preview', {
+    mainPath: mainVideoPath,
+  });
+
+  return waitForHookPreviewJob(jobId, onProgress);
 }
 
 export async function generateHookPreviewAssets(
-  mainVideoPath: string
+  mainVideoPath: string,
+  onProgress?: (event: HookPreviewProgress) => void
 ): Promise<MediaAsset[]> {
-  const clips = await extractHookClipsFromVideo(mainVideoPath);
+  const clips = await extractHookClipsFromVideo(mainVideoPath, onProgress);
   if (clips.length === 0) {
     throw new Error('Could not extract hook clips from this video');
   }

@@ -4,7 +4,9 @@ import {
   clampTime,
   getActiveDiagramAt,
   getActiveFullFrameAt,
+  getFullFrameClipAfterBoundary,
   getPlaybackRateAt,
+  isSequentialOverlayHandoff,
   localTimeInClip,
   type ActiveMediaClip,
 } from '../utils/playback';
@@ -107,6 +109,7 @@ export function VideoPreview({
   const playheadFromVideoRef = useRef(false);
   const overlayPlaybackRef = useRef(false);
   const activeOverlayRef = useRef<ActiveMediaClip | null>(null);
+  const lastOverlayAdvanceEndRef = useRef(-1);
   const overlayWallStartRef = useRef(0);
   const activePlaybackKeyRef = useRef<string>('normal');
   const activeEffectiveRateRef = useRef(1);
@@ -550,10 +553,12 @@ export function VideoPreview({
   const handoffToOverlay = useCallback(
     (time: number, fullFrame: ActiveMediaClip) => {
       const main = mainRef.current;
-      if (!main || overlayPlaybackRef.current) return;
-      if (activeOverlayRef.current?.clip.id === fullFrame.clip.id && overlayVisible) {
-        return;
-      }
+      if (!main) return;
+
+      const sameClip =
+        overlayPlaybackRef.current &&
+        activeOverlayRef.current?.clip.id === fullFrame.clip.id;
+      if (sameClip && overlayVisible) return;
 
       overlayPlaybackRef.current = true;
       activeOverlayRef.current = fullFrame;
@@ -611,6 +616,33 @@ export function VideoPreview({
       clearUltraRefs,
       toMainSource,
     ]
+  );
+
+  const advanceFromOverlayClip = useCallback(
+    (clipEnd: number) => {
+      if (Math.abs(lastOverlayAdvanceEndRef.current - clipEnd) < 0.02) return;
+      lastOverlayAdvanceEndRef.current = clipEnd;
+
+      const next = getFullFrameClipAfterBoundary(
+        clipEnd,
+        timelineClipsRef.current,
+        mediaAssetsRef.current
+      );
+
+      if (isSequentialOverlayHandoff(clipEnd, next)) {
+        handoffToOverlay(clipEnd + 0.001, next);
+        return;
+      }
+
+      if (clipEnd >= durationRef.current - 0.05) {
+        onEnded();
+        return;
+      }
+
+      resumeMainAfterOverlay(clipEnd);
+      publishPlayhead(clipEnd, true, false);
+    },
+    [handoffToOverlay, onEnded, resumeMainAfterOverlay, publishPlayhead]
   );
 
   const startMainPlayback = useCallback(
@@ -968,15 +1000,10 @@ export function VideoPreview({
 
       const clipEnd = active.clip.startTime + active.clip.duration;
       if (global >= clipEnd - 0.03) {
-        if (clipEnd >= durationRef.current - 0.05) {
-          onEnded();
-        } else {
-          resumeMainAfterOverlay(clipEnd);
-          publishPlayhead(clipEnd, true, false);
-        }
+        advanceFromOverlayClip(clipEnd);
       }
     },
-    [publishPlayhead, syncDiagramElement, onEnded, resumeMainAfterOverlay]
+    [publishPlayhead, syncDiagramElement, advanceFromOverlayClip]
   );
 
   seekDuringPlaybackRef.current = seekDuringPlayback;
@@ -1001,6 +1028,7 @@ export function VideoPreview({
     if (playbackResetKey <= 0) return;
     playheadRef.current = 0;
     lastSyncedPlayheadRef.current = 0;
+    lastOverlayAdvanceEndRef.current = -1;
     syncPausedToPlayheadRef.current(0);
   }, [playbackResetKey]);
 
@@ -1356,6 +1384,12 @@ export function VideoPreview({
                 if (isPlayingRef.current && overlayPlaybackRef.current) {
                   e.currentTarget.play().catch(() => {});
                 }
+              }}
+              onEnded={() => {
+                if (!isPlayingRef.current || !overlayPlaybackRef.current) return;
+                const active = activeOverlayRef.current;
+                if (!active) return;
+                advanceFromOverlayClip(active.clip.startTime + active.clip.duration);
               }}
             />
             {showingImageOverlay && overlayMedia && (

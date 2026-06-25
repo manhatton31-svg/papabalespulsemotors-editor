@@ -1281,17 +1281,28 @@ fn parse_showinfo_pts_time(line: &str) -> Option<f64> {
     }
 }
 
-fn detect_scene_timestamps(path: &str) -> Result<Vec<f64>, String> {
+/// Fast scene sampling — skips full decode on long videos; subsamples shorter ones.
+fn detect_scene_timestamps(path: &str, duration: f64) -> Result<Vec<f64>, String> {
+    // Long-form: heuristic planning only (no decode).
+    if duration > 600.0 {
+        return Ok(Vec::new());
+    }
+
+    let analyze_secs = (duration * 0.4).clamp(45.0, 180.0).min(duration);
     let mut command = tool_command("ffmpeg")?;
     configure_low_priority(&mut command, true);
+    let t_arg = format!("{analyze_secs:.2}");
     let output = command
         .args([
             "-hide_banner",
             "-nostdin",
+            "-t",
+            &t_arg,
             "-i",
             path,
+            "-an",
             "-vf",
-            "select='gt(scene,0.32)',showinfo",
+            "fps=1,scale=480:-1,select='gt(scene,0.36)',showinfo",
             "-vsync",
             "vfr",
             "-f",
@@ -1311,6 +1322,187 @@ fn detect_scene_timestamps(path: &str) -> Result<Vec<f64>, String> {
     times.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     times.dedup_by(|a, b| (*a - *b).abs() < 0.45);
     Ok(times)
+}
+
+fn extract_hook_segment(
+    main_path: &str,
+    start: f64,
+    end: f64,
+    output_path: &str,
+) -> Result<(), String> {
+    let ss = format!("{start:.3}");
+    let to = format!("{end:.3}");
+    run_ffmpeg_simple(
+        &[
+            "-y",
+            "-hide_banner",
+            "-nostdin",
+            "-ss",
+            &ss,
+            "-to",
+            &to,
+            "-i",
+            main_path,
+            "-c",
+            "copy",
+            "-avoid_negative_ts",
+            "make_zero",
+            output_path,
+        ],
+        "Failed to extract hook segment",
+        false,
+    )
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HookPreviewProgressEvent {
+    job_id: String,
+    progress: f64,
+    status: String,
+    message: Option<String>,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HookPreviewCompleteEvent {
+    job_id: String,
+    clips: Vec<HookClipResult>,
+    status: String,
+    message: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HookPreviewStartResult {
+    job_id: String,
+}
+
+fn emit_hook_progress(
+    app: &tauri::AppHandle,
+    job_id: &str,
+    progress: f64,
+    status: &str,
+    message: Option<&str>,
+) {
+    let _ = app.emit(
+        "hook-preview-progress",
+        HookPreviewProgressEvent {
+            job_id: job_id.to_string(),
+            progress,
+            status: status.to_string(),
+            message: message.map(str::to_string),
+        },
+    );
+}
+
+fn emit_hook_complete(
+    app: &tauri::AppHandle,
+    job_id: &str,
+    clips: Vec<HookClipResult>,
+    status: &str,
+    message: Option<&str>,
+) {
+    let _ = app.emit(
+        "hook-preview-complete",
+        HookPreviewCompleteEvent {
+            job_id: job_id.to_string(),
+            clips,
+            status: status.to_string(),
+            message: message.map(str::to_string),
+        },
+    );
+}
+
+fn generate_hook_preview_core(
+    app: &tauri::AppHandle,
+    job_id: Option<&str>,
+    main_path: &str,
+) -> Result<Vec<HookClipResult>, String> {
+    let emit = |progress: f64, status: &str, message: Option<&str>| {
+        if let Some(id) = job_id {
+            emit_hook_progress(app, id, progress, status, message);
+        }
+    };
+
+    emit(5.0, "running", Some("Analyzing video for hook moments…"));
+    validate_main_video_source(main_path)?;
+    let duration = resolve_video_duration(main_path, None)?;
+
+    let scene_times = detect_scene_timestamps(main_path, duration).unwrap_or_default();
+    emit(25.0, "running", Some("Planning hook montage…"));
+    let ranges = plan_hook_segment_ranges(duration, &scene_times);
+
+    if ranges.is_empty() {
+        return Err("Video is too short to generate a hook preview".into());
+    }
+
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let work_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("hooks")
+        .join(format!("hook_{stamp}"));
+    fs::create_dir_all(&work_dir).map_err(|e| e.to_string())?;
+
+    let total = ranges.len().max(1);
+    let results: std::sync::Mutex<Vec<Option<HookClipResult>>> =
+        std::sync::Mutex::new(vec![None; ranges.len()]);
+    let extract_err: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+    std::thread::scope(|scope| {
+        for (i, (start, end)) in ranges.iter().enumerate() {
+            let segment_path = work_dir.join(format!("hook_{i:02}.mp4"));
+            let segment_str = segment_path.to_string_lossy().into_owned();
+            let main = main_path.to_string();
+            let err_slot = &extract_err;
+            let out_slot = &results;
+            scope.spawn(move || {
+                if let Err(e) = extract_hook_segment(&main, *start, *end, &segment_str) {
+                    if let Ok(mut guard) = err_slot.lock() {
+                        if guard.is_none() {
+                            *guard = Some(e);
+                        }
+                    }
+                    return;
+                }
+                let seg_duration = (end - start).max(0.0);
+                if let Ok(mut guard) = out_slot.lock() {
+                    guard[i] = Some(HookClipResult {
+                        file_path: segment_str,
+                        duration: seg_duration,
+                        friendly_name: format!("Hook {}", i + 1),
+                    });
+                }
+            });
+        }
+    });
+
+    if let Some(err) = extract_err.lock().ok().and_then(|g| g.clone()) {
+        return Err(err);
+    }
+
+    let collected = results
+        .into_inner()
+        .map_err(|_| "Hook extraction interrupted".to_string())?;
+
+    let mut final_results = Vec::new();
+    for (i, item) in collected.into_iter().enumerate() {
+        let progress = 30.0 + ((i + 1) as f64 / total as f64) * 65.0;
+        emit(
+            progress,
+            "running",
+            Some(&format!("Extracting hook clip {} of {total}…", i + 1)),
+        );
+        final_results.push(item.ok_or_else(|| format!("Hook clip {} failed to extract", i + 1))?);
+    }
+
+    emit(100.0, "completed", Some("Hook preview ready"));
+    Ok(final_results)
 }
 
 fn plan_hook_segment_ranges(duration: f64, scene_times: &[f64]) -> Vec<(f64, f64)> {
@@ -1375,70 +1567,50 @@ fn plan_hook_segment_ranges(duration: f64, scene_times: &[f64]) -> Vec<(f64, f64
     ranges
 }
 
-/// Analyze the main video and extract engaging 15–25s hook segments for the intro track.
+/// Analyze the main video and extract engaging 15–25s hook segments (blocking).
 #[tauri::command]
-fn generate_hook_preview(
-    app: tauri::AppHandle,
-    main_path: String,
-) -> Result<Vec<HookClipResult>, String> {
-    validate_main_video_source(&main_path)?;
-    let duration = resolve_video_duration(&main_path, None)?;
-    let scene_times = detect_scene_timestamps(&main_path).unwrap_or_default();
-    let ranges = plan_hook_segment_ranges(duration, &scene_times);
+fn generate_hook_preview(app: tauri::AppHandle, main_path: String) -> Result<Vec<HookClipResult>, String> {
+    generate_hook_preview_core(&app, None, &main_path)
+}
 
-    if ranges.is_empty() {
-        return Err("Video is too short to generate a hook preview".into());
+/// Start hook generation on a background thread with progress events.
+#[tauri::command]
+fn start_generate_hook_preview(app: tauri::AppHandle, main_path: String) -> Result<HookPreviewStartResult, String> {
+    if main_path.is_empty() {
+        return Err("No main video loaded".into());
     }
 
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0);
-    let work_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?
-        .join("hooks")
-        .join(format!("hook_{stamp}"));
-    fs::create_dir_all(&work_dir).map_err(|e| e.to_string())?;
+    let job_id = format!(
+        "hook_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0)
+    );
 
-    let mut results = Vec::new();
-    for (i, (start, end)) in ranges.iter().enumerate() {
-        let segment_path = work_dir.join(format!("hook_{i:02}.mp4"));
-        let segment_str = segment_path.to_string_lossy().into_owned();
-        let ss = format!("{start:.3}");
-        let to = format!("{end:.3}");
+    let app_thread = app.clone();
+    let main = main_path.clone();
+    let job_for_thread = job_id.clone();
 
-        run_ffmpeg_simple(
-            &[
-                "-y",
-                "-hide_banner",
-                "-nostdin",
-                "-ss",
-                &ss,
-                "-to",
-                &to,
-                "-i",
-                &main_path,
-                "-c",
-                "copy",
-                "-avoid_negative_ts",
-                "make_zero",
-                &segment_str,
-            ],
-            "Failed to extract hook segment",
-            false,
-        )?;
+    std::thread::spawn(move || {
+        let result = generate_hook_preview_core(&app_thread, Some(&job_for_thread), &main);
+        match result {
+            Ok(clips) => {
+                emit_hook_complete(&app_thread, &job_for_thread, clips, "completed", None);
+            }
+            Err(err) => {
+                emit_hook_complete(
+                    &app_thread,
+                    &job_for_thread,
+                    Vec::new(),
+                    "failed",
+                    Some(&err),
+                );
+            }
+        }
+    });
 
-        let seg_duration = (end - start).max(0.0);
-        results.push(HookClipResult {
-            file_path: segment_str,
-            duration: seg_duration,
-            friendly_name: format!("Hook {}", i + 1),
-        });
-    }
-
-    Ok(results)
+    Ok(HookPreviewStartResult { job_id })
 }
 
 fn build_timeline_parts(source_duration: f64, segments: &[TimelapseSegmentInput]) -> Vec<TimelinePart> {
@@ -2838,6 +3010,7 @@ pub fn run() {
             import_main_video,
             stitch_phone_clips,
             generate_hook_preview,
+            start_generate_hook_preview,
             start_phone_upload_server,
             stop_phone_upload_server,
             apply_timelapse_segments,
