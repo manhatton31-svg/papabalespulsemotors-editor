@@ -90,28 +90,39 @@ export async function extractHookClipsFromVideo(
   return waitForHookPreviewJob(jobId, onProgress);
 }
 
+export const HOOK_MONTAGE_NAME = 'Hook Preview';
+
+const HOOK_CLIP_NAME = /^Hook \d+$/;
+
+function hookClipNumber(name: string): number {
+  const match = name.match(/^Hook (\d+)$/);
+  return match ? Number.parseInt(match[1], 10) : Number.MAX_SAFE_INTEGER;
+}
+
 export async function generateHookPreviewAssets(
   mainVideoPath: string,
   onProgress?: (event: HookPreviewProgress) => void
 ): Promise<MediaAsset[]> {
   const clips = await extractHookClipsFromVideo(mainVideoPath, onProgress);
-  if (clips.length === 0) {
+  const segmentClips = clips
+    .filter((clip) => HOOK_CLIP_NAME.test(clip.friendlyName))
+    .sort((a, b) => hookClipNumber(a.friendlyName) - hookClipNumber(b.friendlyName));
+
+  const timelineClips = segmentClips.length > 0 ? segmentClips : clips;
+
+  if (timelineClips.length === 0) {
     throw new Error('Could not extract hook clips from this video');
   }
 
   return addToContentLibrary(
     'intro',
-    clips.map((clip) => ({
+    timelineClips.map((clip) => ({
       filePath: clip.filePath,
       friendlyName: clip.friendlyName,
       duration: clip.duration,
     }))
   );
 }
-
-export const HOOK_MONTAGE_NAME = 'Hook Preview';
-
-const HOOK_CLIP_NAME = /^Hook \d+$/;
 
 export function isHookMontageAsset(asset: MediaAsset): boolean {
   return asset.category === 'intro' && asset.friendlyName === HOOK_MONTAGE_NAME;
@@ -139,11 +150,13 @@ export function findDefaultIntroAsset(
 }
 
 function hookAssetsForTimeline(hookAssets: MediaAsset[]): MediaAsset[] {
-  const montage = hookAssets.find(isHookMontageAsset);
-  if (montage) return [montage];
-  const segments = hookAssets.filter(isHookClipAsset);
+  const segments = hookAssets
+    .filter(isHookClipAsset)
+    .sort(
+      (a, b) => hookClipNumber(a.friendlyName) - hookClipNumber(b.friendlyName)
+    );
   if (segments.length > 0) return segments;
-  return hookAssets;
+  return hookAssets.filter((asset) => !isHookMontageAsset(asset));
 }
 
 export function buildHookTimelineClips(

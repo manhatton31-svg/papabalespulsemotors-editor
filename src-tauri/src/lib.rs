@@ -1115,6 +1115,15 @@ fn build_phone_stitch_filter(durations: &[f64], crossfade: f64) -> String {
         return String::new();
     }
 
+    if crossfade <= 0.001 {
+        let mut filter = String::new();
+        for index in 0..count {
+            filter.push_str(&format!("[{index}:v][{index}:a]"));
+        }
+        filter.push_str(&format!("concat=n={count}:v=1:a=1[vout][aout];"));
+        return filter;
+    }
+
     let mut filter = String::new();
     let mut video_prev = "0:v".to_string();
     let mut audio_prev = "0:a".to_string();
@@ -1146,6 +1155,58 @@ fn build_phone_stitch_filter(durations: &[f64], crossfade: f64) -> String {
     filter
 }
 
+fn phone_stitch_crossfade_for_durations(durations: &[f64]) -> f64 {
+    let min_duration = durations
+        .iter()
+        .copied()
+        .fold(f64::INFINITY, f64::min);
+    if !min_duration.is_finite() || min_duration <= 0.5 {
+        return 0.0;
+    }
+    if min_duration <= PHONE_STITCH_CROSSFADE_SECS {
+        return 0.0;
+    }
+    PHONE_STITCH_CROSSFADE_SECS.min(min_duration / 3.0)
+}
+
+fn run_phone_stitch_ffmpeg(
+    normalized_paths: &[String],
+    durations: &[f64],
+    crossfade: f64,
+    output_path: &str,
+) -> Result<(), String> {
+    let filter = build_phone_stitch_filter(durations, crossfade);
+    let mut args = vec!["-y", "-hide_banner", "-nostdin"];
+    for path in normalized_paths {
+        args.push("-i");
+        args.push(path.as_str());
+    }
+    args.extend([
+        "-filter_complex",
+        &filter,
+        "-map",
+        "[vout]",
+        "-map",
+        "[aout]",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "23",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        "-movflags",
+        "+faststart",
+        output_path,
+    ]);
+    run_ffmpeg_simple(&args, "Failed to stitch phone clips", false)
+}
+
 /// Stitch phone-uploaded clips in order with smooth crossfades between each pair.
 #[tauri::command]
 fn stitch_phone_clips(
@@ -1170,7 +1231,6 @@ fn stitch_phone_clips(
         });
     }
 
-    let crossfade = PHONE_STITCH_CROSSFADE_SECS;
     let work_dir = app
         .path()
         .app_data_dir()
@@ -1197,55 +1257,38 @@ fn stitch_phone_clips(
         let normalized_str = normalized.to_string_lossy().into_owned();
         normalize_phone_clip_for_stitch(source_path, &normalized_str)?;
         let duration = resolve_video_duration(&normalized_str, None).unwrap_or(0.0);
-        if duration <= crossfade {
-            return Err(format!(
-                "Clip {} is too short for a {crossfade}s crossfade — upload longer clips or fewer files",
-                index + 1
-            ));
+        if duration <= 0.1 {
+            return Err(format!("Clip {} has no usable duration", index + 1));
         }
         normalized_paths.push(normalized_str);
         durations.push(duration);
     }
 
-    let filter = build_phone_stitch_filter(&durations, crossfade);
+    let crossfade = phone_stitch_crossfade_for_durations(&durations);
     let output_path = work_dir
         .join("stitched.mp4")
         .to_string_lossy()
         .into_owned();
 
-    let mut args = vec!["-y", "-hide_banner", "-nostdin"];
-    for path in &normalized_paths {
-        args.push("-i");
-        args.push(path.as_str());
+    if let Err(primary_err) =
+        run_phone_stitch_ffmpeg(&normalized_paths, &durations, crossfade, &output_path)
+    {
+        let hard_cut_err = run_phone_stitch_ffmpeg(
+            &normalized_paths,
+            &durations,
+            0.0,
+            &output_path,
+        )
+        .map_err(|fallback_err| {
+            format!("{primary_err} (hard-cut fallback also failed: {fallback_err})")
+        })?;
+        let _ = hard_cut_err;
     }
-    args.extend([
-        "-filter_complex",
-        &filter,
-        "-map",
-        "[vout]",
-        "-map",
-        "[aout]",
-        "-c:v",
-        "libx264",
-        "-preset",
-        "fast",
-        "-crf",
-        "23",
-        "-pix_fmt",
-        "yuv420p",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "192k",
-        "-movflags",
-        "+faststart",
-        &output_path,
-    ]);
-
-    run_ffmpeg_simple(&args, "Failed to stitch phone clips", false)?;
 
     let duration = resolve_video_duration(&output_path, None).unwrap_or_else(|_| {
-        durations.iter().sum::<f64>() - (durations.len() as f64 - 1.0) * crossfade
+        let overlap = phone_stitch_crossfade_for_durations(&durations)
+            * (durations.len().saturating_sub(1) as f64);
+        durations.iter().sum::<f64>() - overlap
     });
 
     Ok(StitchPhoneClipsResult {
@@ -2007,85 +2050,16 @@ fn generate_hook_preview_core(
         segment_paths.push(item.ok_or_else(|| format!("Hook segment {} failed to extract", i + 1))?);
     }
 
-    let norm_results: std::sync::Mutex<Vec<Option<String>>> =
-        std::sync::Mutex::new(vec![None; segment_paths.len()]);
-    let norm_err: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
-
-    emit(58.0, "running", Some("Preparing segments for montage…"));
-    std::thread::scope(|scope| {
-        for (i, raw_path) in segment_paths.iter().enumerate() {
-            let norm_path = work_dir
-                .join(format!("norm_{i:02}.mp4"))
-                .to_string_lossy()
-                .into_owned();
-            let input = raw_path.clone();
-            let err_slot = &norm_err;
-            let out_slot = &norm_results;
-            scope.spawn(move || {
-                if let Err(e) = normalize_phone_clip_for_stitch(&input, &norm_path) {
-                    if let Ok(mut guard) = err_slot.lock() {
-                        if guard.is_none() {
-                            *guard = Some(e);
-                        }
-                    }
-                    return;
-                }
-                if let Ok(mut guard) = out_slot.lock() {
-                    guard[i] = Some(norm_path);
-                }
-            });
-        }
-    });
-
-    if let Some(err) = norm_err.lock().ok().and_then(|g| g.clone()) {
-        return Err(err);
-    }
-
-    let normalized_paths = norm_results
-        .into_inner()
-        .map_err(|_| "Hook normalization interrupted".to_string())?;
-    let mut stitch_inputs = Vec::new();
-    let mut stitch_durations = Vec::new();
-    for (i, item) in normalized_paths.into_iter().enumerate() {
-        let path = item.ok_or_else(|| format!("Hook segment {} failed to normalize", i + 1))?;
-        let seg_duration = (planned[i].end - planned[i].start).max(0.0);
-        stitch_durations.push(seg_duration);
-        stitch_inputs.push(path);
-    }
-
-    let mut transitions = Vec::new();
-    for pair in planned.windows(2) {
-        transitions.push(transition_text_between(&pair[0], &pair[1]));
-    }
-
-    emit(78.0, "running", Some("Stitching hook montage with transitions…"));
-    let montage_path = work_dir
-        .join("hook_preview.mp4")
-        .to_string_lossy()
-        .into_owned();
-    stitch_hook_montage(
-        &stitch_inputs,
-        &stitch_durations,
-        &transitions,
-        &montage_path,
-    )?;
-
-    let montage_duration = resolve_video_duration(&montage_path, None).unwrap_or_else(|_| {
-        let sum: f64 = stitch_durations.iter().sum();
-        let crossfades = HOOK_CROSSFADE_SECS * (stitch_durations.len().saturating_sub(1) as f64);
-        (sum - crossfades).max(0.0)
-    });
+    emit(85.0, "running", Some("Finalizing hook clips…"));
 
     let mut final_results = Vec::new();
-    if planned.len() > 1 {
-        final_results.push(HookClipResult {
-            file_path: montage_path,
-            duration: montage_duration,
-            friendly_name: HOOK_MONTAGE_NAME.to_string(),
-        });
-    }
-
     for (i, segment) in planned.iter().enumerate() {
+        let progress = 85.0 + ((i + 1) as f64 / total as f64) * 12.0;
+        emit(
+            progress,
+            "running",
+            Some(&format!("Hook {} of {total} ready", i + 1)),
+        );
         final_results.push(HookClipResult {
             file_path: segment_paths[i].clone(),
             duration: (segment.end - segment.start).max(0.0),

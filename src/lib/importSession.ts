@@ -56,11 +56,17 @@ function reportProgress(
   onProgress?.(progress);
 }
 
+export interface ResolvedMainVideo {
+  mainVideo: MainVideoSelection;
+  stitched: boolean;
+  stitchError?: string;
+}
+
 export async function resolveMainVideoFromClips(
   clips: ImportClipRef[],
   projectName: string,
   onProgress?: ImportProgressHandler
-): Promise<MainVideoSelection> {
+): Promise<ResolvedMainVideo> {
   if (clips.length === 0) {
     throw new Error('No clips to import');
   }
@@ -74,31 +80,56 @@ export async function resolveMainVideoFromClips(
       clipCount: 1,
     });
     await yieldToUi();
-    return loadMainVideoDirect(clips[0].sourcePath);
+    return {
+      mainVideo: await loadMainVideoDirect(clips[0].sourcePath),
+      stitched: false,
+    };
   }
 
   reportProgress(onProgress, {
     phase: 'stitching',
-    message: `Stitching ${clips.length} clips with crossfade…`,
+    message: 'Stitching clips…',
     clipCount: clips.length,
   });
   await yieldToUi();
 
   const sourcePaths = clips.map((clip) => clip.sourcePath);
-  const stitched = await stitchPhoneClips(sourcePaths, trimmedName);
 
-  reportProgress(onProgress, {
-    phase: 'loading-video',
-    message: 'Loading stitched video…',
-    clipCount: clips.length,
-  });
-  await yieldToUi();
+  try {
+    const stitched = await stitchPhoneClips(sourcePaths, trimmedName);
 
-  return {
-    filePath: stitched.filePath,
-    url: toAssetUrl(stitched.filePath),
-    duration: stitched.duration,
-  };
+    reportProgress(onProgress, {
+      phase: 'loading-video',
+      message: 'Loading stitched video…',
+      clipCount: clips.length,
+    });
+    await yieldToUi();
+
+    return {
+      mainVideo: {
+        filePath: stitched.filePath,
+        url: toAssetUrl(stitched.filePath),
+        duration: stitched.duration,
+      },
+      stitched: true,
+    };
+  } catch (stitchErr) {
+    const stitchError =
+      stitchErr instanceof Error ? stitchErr.message : String(stitchErr);
+
+    reportProgress(onProgress, {
+      phase: 'loading-video',
+      message: 'Stitch failed — loading first clip…',
+      clipCount: clips.length,
+    });
+    await yieldToUi();
+
+    return {
+      mainVideo: await loadMainVideoDirect(clips[0].sourcePath),
+      stitched: false,
+      stitchError,
+    };
+  }
 }
 
 export async function completeClipImportSession(
@@ -107,7 +138,7 @@ export async function completeClipImportSession(
   onProgress?: ImportProgressHandler
 ): Promise<CompletedImportSession> {
   const trimmedName = projectName.trim() || 'Untitled Project';
-  const mainVideo = await resolveMainVideoFromClips(clips, trimmedName, onProgress);
+  const { mainVideo } = await resolveMainVideoFromClips(clips, trimmedName, onProgress);
   const mainVideoPieces = await buildMainVideoPieces(clips);
 
   return {

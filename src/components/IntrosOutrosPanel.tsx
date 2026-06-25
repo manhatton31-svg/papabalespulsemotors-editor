@@ -195,7 +195,7 @@ export function IntrosOutrosPanel({
           disabled={!hasVideo || isGeneratingHook}
           title={
             hasVideo
-              ? 'Analyze main video and build a hook montage at the timeline start'
+              ? 'Analyze main video and place hook clips at the timeline start'
               : 'Import a main video first'
           }
         >

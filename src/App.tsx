@@ -17,6 +17,7 @@ import {
   buildHookTimelineClips,
   findDefaultIntroAsset,
   generateHookPreviewAssets,
+  isHookClipAsset,
 } from './lib/hookGenerate';
 import {
   buildProject,
@@ -282,8 +283,9 @@ export default function App() {
         if (firstIntro) setSelectedClipId(firstIntro.id);
         return next;
       });
-      if (hookAssets.length > 0) {
-        setSelectedAssetIds((prev) => ({ ...prev, intro: hookAssets[0].id }));
+      const firstHookAsset = hookAssets.find(isHookClipAsset) ?? hookAssets[0];
+      if (firstHookAsset) {
+        setSelectedAssetIds((prev) => ({ ...prev, intro: firstHookAsset.id }));
       }
       setPlayhead(0);
       setPlayheadEngaged(false);
@@ -309,18 +311,30 @@ export default function App() {
 
       const onProgress = (progress: ImportProgress) => setImportPipelineProgress(progress);
 
+      let mainClip: TimelineClip | null = null;
+      let mainVideoFilePath: string | null = null;
+
       try {
-        const mainVideo = await resolveMainVideoFromClips(clips, trimmedName, onProgress);
-        const mainClip = loadMainVideo(mainVideo, { silent: true });
+        const resolved = await resolveMainVideoFromClips(clips, trimmedName, onProgress);
+        const { mainVideo, stitched, stitchError } = resolved;
+
+        mainVideoFilePath = mainVideo.filePath;
+        mainClip = loadMainVideo(mainVideo, { silent: true });
         setLeftPanel('broll');
 
         const pieces = await buildMainVideoPieces(clips);
         setMainVideoPieces(pieces);
 
-        if (isSingleClip) {
-          showStatus('Video loaded. Generating hook preview...');
+        if (stitchError) {
+          showStatus(
+            `Could not stitch clips together: ${stitchError}. Loaded first clip — generating hook preview…`
+          );
+        } else if (isSingleClip) {
+          showStatus('Video loaded — generating hook preview…');
+        } else if (stitched) {
+          showStatus('Stitch complete — generating hook preview…');
         } else {
-          showStatus('Stitch complete. Generating hook preview...');
+          showStatus('Generating hook preview…');
         }
 
         onProgress({
@@ -329,44 +343,42 @@ export default function App() {
           clipCount,
         });
         await yieldToUi();
-
-        let libraryBeforeHook: MediaAsset[] = [];
-        setMediaAssets((prev) => {
-          libraryBeforeHook = prev;
-          return prev;
-        });
-
-        const importReadyMessage = isSingleClip
-          ? `Project "${trimmedName}" ready`
-          : `Project "${trimmedName}" ready — ${clipCount} clips stitched into main video`;
-
-        setIsGeneratingHook(true);
-        try {
-          const hookAssets = await generateHookPreviewAssets(mainVideo.filePath, (event) => {
-            if (event.message) {
-              setImportPipelineProgress({
-                phase: 'generating-hook',
-                message: event.message,
-                clipCount,
-              });
-            }
-          });
-          const defaultIntro = findDefaultIntroAsset(libraryBeforeHook);
-          setMediaAssets((prev) => mergeMediaAssets(prev, hookAssets));
-          applyHookPreviewResult(hookAssets, [mainClip], defaultIntro);
-          showStatus('Hook preview automatically generated and placed at start');
-        } catch (hookErr) {
-          const hookMessage =
-            hookErr instanceof Error ? hookErr.message : 'Hook preview could not be generated';
-          showStatus(`${hookMessage}. ${importReadyMessage}`);
-        } finally {
-          setIsGeneratingHook(false);
-        }
-
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         showStatus(`Import failed: ${message}`);
+        return;
+      }
+
+      if (!mainClip || !mainVideoFilePath) return;
+
+      let libraryBeforeHook: MediaAsset[] = [];
+      setMediaAssets((prev) => {
+        libraryBeforeHook = prev;
+        return prev;
+      });
+
+      setIsGeneratingHook(true);
+      try {
+        const hookAssets = await generateHookPreviewAssets(mainVideoFilePath, (event) => {
+          if (event.message) {
+            setImportPipelineProgress({
+              phase: 'generating-hook',
+              message: event.message,
+              clipCount,
+            });
+          }
+        });
+        const defaultIntro = findDefaultIntroAsset(libraryBeforeHook);
+        setMediaAssets((prev) => mergeMediaAssets(prev, hookAssets));
+        applyHookPreviewResult(hookAssets, [mainClip], defaultIntro);
+        setLeftPanel('introsOutros');
+        showStatus('Hook preview ready — hooks placed on Intro track');
+      } catch (hookErr) {
+        const hookMessage =
+          hookErr instanceof Error ? hookErr.message : 'Hook preview could not be generated';
+        showStatus(`Hook preview failed: ${hookMessage}`);
       } finally {
+        setIsGeneratingHook(false);
         setIsImportingVideo(false);
         setImportPipelineProgress(null);
       }
@@ -554,7 +566,8 @@ export default function App() {
       setIsPlaying(false);
       setPlaybackResetKey((k) => k + 1);
       setLeftPanel('introsOutros');
-      showStatus('Hook preview generated and placed at start');
+      setLeftPanel('introsOutros');
+      showStatus('Hook preview ready — hooks placed on Intro track');
     } catch (err) {
       showStatus(`Hook preview failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
