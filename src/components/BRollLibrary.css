@@ -27,6 +27,29 @@
   cursor: not-allowed;
 }
 
+.broll-clip-btn {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.broll-clip-btn-active {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+}
+
+.broll-clip-btn-active:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.28);
+}
+
+.broll-clip-cancel-btn {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
 .broll-drag-hint {
   font-size: 10px;
   color: var(--text-secondary);

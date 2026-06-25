@@ -1773,11 +1773,19 @@ fn stitch_hook_montage(
     run_ffmpeg_simple(&args, "Failed to stitch hook montage", false)
 }
 
-fn extract_hook_segment(
-    main_path: &str,
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExtractBrollClipResult {
+    file_path: String,
+    duration: f64,
+}
+
+fn extract_video_segment_copy(
+    source_path: &str,
     start: f64,
     end: f64,
     output_path: &str,
+    failure_message: &str,
 ) -> Result<(), String> {
     let ss = format!("{start:.3}");
     let to = format!("{end:.3}");
@@ -1791,16 +1799,79 @@ fn extract_hook_segment(
             "-to",
             &to,
             "-i",
-            main_path,
+            source_path,
             "-c",
             "copy",
             "-avoid_negative_ts",
             "make_zero",
             output_path,
         ],
-        "Failed to extract hook segment",
+        failure_message,
         false,
     )
+}
+
+fn extract_hook_segment(
+    main_path: &str,
+    start: f64,
+    end: f64,
+    output_path: &str,
+) -> Result<(), String> {
+    extract_video_segment_copy(
+        main_path,
+        start,
+        end,
+        output_path,
+        "Failed to extract hook segment",
+    )
+}
+
+/// Extract a user-selected range from any project video into the B-Roll assets folder.
+#[tauri::command]
+fn extract_broll_clip(
+    app: tauri::AppHandle,
+    source_path: String,
+    start: f64,
+    end: f64,
+    friendly_name: String,
+) -> Result<ExtractBrollClipResult, String> {
+    validate_main_video_source(&source_path)?;
+
+    if !start.is_finite() || !end.is_finite() || end <= start + 0.1 {
+        return Err("Clip must be at least 0.1 seconds long".into());
+    }
+
+    let work_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("broll_clips");
+    fs::create_dir_all(&work_dir).map_err(|e| e.to_string())?;
+
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let safe_name = sanitize_stitch_project_name(friendly_name.trim());
+    let output_path = work_dir
+        .join(format!("{safe_name}_{stamp}.mp4"))
+        .to_string_lossy()
+        .into_owned();
+
+    extract_video_segment_copy(
+        &source_path,
+        start,
+        end,
+        &output_path,
+        "Failed to extract B-Roll clip",
+    )?;
+
+    let duration = resolve_video_duration(&output_path, None).unwrap_or(end - start);
+
+    Ok(ExtractBrollClipResult {
+        file_path: output_path,
+        duration,
+    })
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -3516,6 +3587,7 @@ pub fn run() {
             stitch_phone_clips,
             generate_hook_preview,
             start_generate_hook_preview,
+            extract_broll_clip,
             start_phone_upload_server,
             stop_phone_upload_server,
             apply_timelapse_segments,

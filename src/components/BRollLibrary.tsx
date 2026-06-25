@@ -9,10 +9,14 @@ interface BRollLibraryProps {
   assets: MediaAsset[];
   selectedId: string | null;
   playheadReady: boolean;
+  hasVideo: boolean;
+  clipBrollModeActive: boolean;
   onSelect: (id: string) => void;
   onRename: (id: string, name: string) => void;
   onToggleFavorite: (id: string) => void;
   onAddAtPlayhead: () => void;
+  onToggleClipBrollMode: () => void;
+  onCancelClipBrollMode: () => void;
 }
 
 export function BRollLibrary({
@@ -22,7 +26,11 @@ export function BRollLibrary({
   onSelect,
   onRename,
   onToggleFavorite,
+  hasVideo,
+  clipBrollModeActive,
   onAddAtPlayhead,
+  onToggleClipBrollMode,
+  onCancelClipBrollMode,
 }: BRollLibraryProps) {
   const [renameModal, setRenameModal] = useState<{ id: string; name: string } | null>(null);
   const [previewAsset, setPreviewAsset] = useState<MediaAsset | null>(null);
@@ -57,7 +65,7 @@ export function BRollLibrary({
           type="button"
           className="btn btn-accent broll-insert-btn"
           onClick={onAddAtPlayhead}
-          disabled={!canInsert}
+          disabled={!canInsert || clipBrollModeActive}
           title={
             canInsert
               ? 'Insert selected clip at the playhead'
@@ -66,7 +74,33 @@ export function BRollLibrary({
         >
           Add B-Roll Right Here
         </button>
-        <span className="broll-drag-hint">Drag clips onto the B-Roll track on the timeline</span>
+        <button
+          type="button"
+          className={`btn broll-clip-btn ${clipBrollModeActive ? 'broll-clip-btn-active' : 'btn-secondary'}`}
+          onClick={onToggleClipBrollMode}
+          disabled={!hasVideo}
+          title={
+            hasVideo
+              ? 'Mark a range on the timeline and save it to your B-Roll Library'
+              : 'Load a video first'
+          }
+        >
+          {clipBrollModeActive ? 'Clip B-Roll mode active' : 'Clip B-Roll from Video'}
+        </button>
+        {clipBrollModeActive && (
+          <button
+            type="button"
+            className="btn btn-secondary broll-clip-cancel-btn"
+            onClick={onCancelClipBrollMode}
+          >
+            Cancel Clip B-Roll
+          </button>
+        )}
+        <span className="broll-drag-hint">
+          {clipBrollModeActive
+            ? 'Click timeline: first click = start, second click = end (Esc to cancel)'
+            : 'Drag clips onto the B-Roll track on the timeline'}
+        </span>
       </div>
 
       <div className="broll-header">

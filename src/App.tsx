@@ -42,6 +42,14 @@ import { useVideoDropImport } from './hooks/useVideoDropImport';
 import { ImportProgressBanner } from './components/ImportProgressBanner';
 import { PhoneUploadModal } from './components/PhoneUploadModal';
 import { ProjectNamingModal } from './components/ProjectNamingModal';
+import { Modal } from './components/Modal';
+import {
+  defaultBrollClipName,
+  extractBrollClipFromVideo,
+  resolveVideoSourceAtTime,
+  type ClipBrollExtractRequest,
+  type ClipBrollPendingStart,
+} from './lib/clipBroll';
 import {
   buildMainVideoPieces,
   resolveMainVideoFromClips,
@@ -78,6 +86,16 @@ export default function App() {
   const [timelapseModeActive, setTimelapseModeActive] = useState(false);
   const [timelapsePendingStart, setTimelapsePendingStart] = useState<number | null>(null);
   const [timelapseSpeed, setTimelapseSpeed] = useState<TimelapseSpeed>(8);
+  const [clipBrollModeActive, setClipBrollModeActive] = useState(false);
+  const [clipBrollPendingStart, setClipBrollPendingStart] =
+    useState<ClipBrollPendingStart | null>(null);
+  const [clipBrollSelection, setClipBrollSelection] = useState<{
+    start: number;
+    end: number;
+  } | null>(null);
+  const [clipBrollNaming, setClipBrollNaming] = useState<ClipBrollExtractRequest | null>(null);
+  const [clipBrollNameDraft, setClipBrollNameDraft] = useState('');
+  const [clipBrollSaving, setClipBrollSaving] = useState(false);
   const [backgroundExportActive, setBackgroundExportActive] = useState(false);
   const [exportProgress, setExportProgress] = useState<number | null>(null);
   const [exportStatusMessage, setExportStatusMessage] = useState<string | null>(null);
@@ -583,7 +601,170 @@ export default function App() {
     }
   };
 
+  const exitClipBrollMode = useCallback(() => {
+    setClipBrollModeActive(false);
+    setClipBrollPendingStart(null);
+    setClipBrollSelection(null);
+    setClipBrollNaming(null);
+    setClipBrollNameDraft('');
+    setClipBrollSaving(false);
+  }, []);
+
+  const handleToggleClipBrollMode = useCallback(() => {
+    if (clipBrollModeActive) {
+      exitClipBrollMode();
+      showStatus('Clip B-Roll mode cancelled');
+      return;
+    }
+    setTimelapseModeActive(false);
+    setTimelapsePendingStart(null);
+    setClipBrollModeActive(true);
+    setLeftPanel('broll');
+    showStatus('Click timeline to set start point');
+  }, [clipBrollModeActive, exitClipBrollMode]);
+
+  const handleCancelClipBrollMode = useCallback(() => {
+    exitClipBrollMode();
+    showStatus('Clip B-Roll mode cancelled');
+  }, [exitClipBrollMode]);
+
+  const handleClipBrollClick = useCallback(
+    (globalTime: number) => {
+      const source = resolveVideoSourceAtTime(
+        globalTime,
+        timelineClips,
+        mediaAssets,
+        mainVideoPath,
+        mainClipOffset
+      );
+
+      if (!source) {
+        showStatus('Click on a video region (main, hooks, or overlays)');
+        return;
+      }
+
+      setPlayheadEngaged(true);
+      setPlayhead(globalTime);
+      setIsPlaying(false);
+
+      if (!clipBrollPendingStart) {
+        setClipBrollPendingStart({
+          globalTime,
+          sourcePath: source.filePath,
+          localTime: source.localTime,
+          sourceLabel: source.sourceLabel,
+        });
+        setClipBrollSelection(null);
+        showStatus('Click timeline to set end point');
+        return;
+      }
+
+      const endSource = resolveVideoSourceAtTime(
+        globalTime,
+        timelineClips,
+        mediaAssets,
+        mainVideoPath,
+        mainClipOffset
+      );
+
+      if (!endSource || endSource.filePath !== clipBrollPendingStart.sourcePath) {
+        showStatus('Start and end must be in the same video — try again');
+        setClipBrollPendingStart(null);
+        setClipBrollSelection(null);
+        showStatus('Click timeline to set start point');
+        return;
+      }
+
+      const startLocal = Math.min(clipBrollPendingStart.localTime, endSource.localTime);
+      const endLocal = Math.max(clipBrollPendingStart.localTime, endSource.localTime);
+      const startGlobal = Math.min(clipBrollPendingStart.globalTime, globalTime);
+      const endGlobal = Math.max(clipBrollPendingStart.globalTime, globalTime);
+
+      if (endLocal - startLocal < 0.25) {
+        showStatus('Selection too short — try again');
+        setClipBrollPendingStart(null);
+        setClipBrollSelection(null);
+        showStatus('Click timeline to set start point');
+        return;
+      }
+
+      const defaultName = defaultBrollClipName(clipBrollPendingStart.sourceLabel, startLocal);
+      setClipBrollSelection({ start: startGlobal, end: endGlobal });
+      setClipBrollPendingStart(null);
+      setClipBrollNaming({
+        sourcePath: clipBrollPendingStart.sourcePath,
+        startLocal,
+        endLocal,
+        defaultName,
+      });
+      setClipBrollNameDraft(defaultName);
+      showStatus('Name your new B-Roll clip');
+    },
+    [
+      clipBrollPendingStart,
+      timelineClips,
+      mediaAssets,
+      mainVideoPath,
+      mainClipOffset,
+    ]
+  );
+
+  const handleClipBrollSave = useCallback(async () => {
+    if (!clipBrollNaming || clipBrollSaving) return;
+    const friendlyName = clipBrollNameDraft.trim() || clipBrollNaming.defaultName;
+
+    setClipBrollSaving(true);
+    try {
+      const extracted = await extractBrollClipFromVideo(
+        clipBrollNaming.sourcePath,
+        clipBrollNaming.startLocal,
+        clipBrollNaming.endLocal,
+        friendlyName
+      );
+      const added = await addToContentLibrary('broll', [
+        {
+          filePath: extracted.filePath,
+          friendlyName,
+          duration: extracted.duration,
+        },
+      ]);
+      setMediaAssets((prev) => mergeMediaAssets(prev, added));
+      if (added.length > 0) {
+        setSelectedAssetIds((prev) => ({ ...prev, broll: added[0].id }));
+      }
+      exitClipBrollMode();
+      showStatus('B-Roll saved successfully');
+    } catch (err) {
+      showStatus(
+        `Could not save B-Roll: ${err instanceof Error ? err.message : String(err)}`
+      );
+    } finally {
+      setClipBrollSaving(false);
+    }
+  }, [clipBrollNaming, clipBrollNameDraft, clipBrollSaving, exitClipBrollMode]);
+
+  useEffect(() => {
+    if (!clipBrollModeActive && !clipBrollNaming) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (clipBrollNaming) {
+        setClipBrollNaming(null);
+        setClipBrollNameDraft('');
+        setClipBrollSelection(null);
+      }
+      exitClipBrollMode();
+      showStatus('Clip B-Roll mode cancelled');
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [clipBrollModeActive, clipBrollNaming, exitClipBrollMode]);
+
   const handleToggleTimelapseMode = () => {
+    if (!timelapseModeActive) {
+      exitClipBrollMode();
+    }
     setTimelapseModeActive((active) => {
       if (active) setTimelapsePendingStart(null);
       return !active;
@@ -658,12 +839,12 @@ export default function App() {
 
   const handleSeekAndPlay = useCallback(
     (time: number) => {
-      if (timelapseModeActive) return;
+      if (timelapseModeActive || clipBrollModeActive) return;
       setPlayheadEngaged(true);
       setPlayhead(time);
       if (mainVideoUrl) setIsPlaying(true);
     },
-    [mainVideoUrl, timelapseModeActive]
+    [mainVideoUrl, timelapseModeActive, clipBrollModeActive]
   );
 
   const handlePlayheadTick = useCallback((time: number) => {
@@ -1013,6 +1194,9 @@ export default function App() {
           onAddAtPlayhead={handleAddAtPlayhead}
           onToggleBrollFavorite={handleToggleBrollFavorite}
           onToggleHookFavorite={handleToggleHookFavorite}
+          clipBrollModeActive={clipBrollModeActive}
+          onToggleClipBrollMode={handleToggleClipBrollMode}
+          onCancelClipBrollMode={handleCancelClipBrollMode}
           onToggleTimelapseMode={handleToggleTimelapseMode}
           onTimelapseSpeedChange={setTimelapseSpeed}
           onRemoveTimelapseSegment={(id) =>
@@ -1082,7 +1266,11 @@ export default function App() {
           timelapseModeActive={timelapseModeActive}
           timelapsePendingStart={timelapsePendingStart}
           diagramModeActive={diagramModeActive}
+          clipBrollModeActive={clipBrollModeActive || clipBrollNaming !== null}
+          clipBrollPendingGlobalTime={clipBrollPendingStart?.globalTime ?? null}
+          clipBrollSelection={clipBrollSelection}
           onTimelapseClick={handleTimelapseClick}
+          onClipBrollClick={handleClipBrollClick}
         />
       </div>
 
@@ -1143,6 +1331,55 @@ export default function App() {
         processingLabel="Saving…"
         inputLabel="Project name"
       />
+
+      <Modal
+        open={clipBrollNaming !== null}
+        title="Save B-Roll Clip"
+        onClose={() => {
+          if (clipBrollSaving) return;
+          exitClipBrollMode();
+          showStatus('Clip B-Roll cancelled');
+        }}
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={clipBrollSaving}
+              onClick={() => {
+                exitClipBrollMode();
+                showStatus('Clip B-Roll cancelled');
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={clipBrollSaving}
+              onClick={() => void handleClipBrollSave()}
+            >
+              {clipBrollSaving ? 'Saving…' : 'Save to B-Roll Library'}
+            </button>
+          </>
+        }
+      >
+        <p className="clip-broll-modal-hint">
+          This section will be extracted and saved to your B-Roll Library.
+        </p>
+        <label className="clip-broll-modal-label" htmlFor="clip-broll-name">
+          Clip name
+        </label>
+        <input
+          id="clip-broll-name"
+          className="rename-input"
+          value={clipBrollNameDraft}
+          onChange={(e) => setClipBrollNameDraft(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && !clipBrollSaving && void handleClipBrollSave()}
+          autoFocus
+          placeholder="e.g. motor_closeup_0m12s"
+        />
+      </Modal>
 
       {statusMsg && <div className="status-toast">{statusMsg}</div>}
     </div>

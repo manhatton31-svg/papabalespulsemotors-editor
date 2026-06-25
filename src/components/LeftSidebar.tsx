@@ -34,6 +34,9 @@ interface LeftSidebarProps {
   onAddAtPlayhead: (category: LibraryCategory) => void;
   onToggleBrollFavorite: (id: string) => void;
   onToggleHookFavorite: (id: string) => void;
+  clipBrollModeActive: boolean;
+  onToggleClipBrollMode: () => void;
+  onCancelClipBrollMode: () => void;
   onToggleTimelapseMode: () => void;
   onTimelapseSpeedChange: (speed: TimelapseSpeed) => void;
   onRemoveTimelapseSegment: (id: string) => void;
@@ -64,6 +67,9 @@ export function LeftSidebar({
   onAddAtPlayhead,
   onToggleBrollFavorite,
   onToggleHookFavorite,
+  clipBrollModeActive,
+  onToggleClipBrollMode,
+  onCancelClipBrollMode,
   onToggleTimelapseMode,
   onTimelapseSpeedChange,
   onRemoveTimelapseSegment,
@@ -111,10 +117,14 @@ export function LeftSidebar({
             assets={brollAssets}
             selectedId={selectedAssetIds.broll}
             playheadReady={playheadReady}
+            hasVideo={hasVideo}
+            clipBrollModeActive={clipBrollModeActive}
             onSelect={(id) => onSelectAsset('broll', id)}
             onRename={(id, name) => onRenameAsset('broll', id, name)}
             onToggleFavorite={onToggleBrollFavorite}
             onAddAtPlayhead={() => onAddAtPlayhead('broll')}
+            onToggleClipBrollMode={onToggleClipBrollMode}
+            onCancelClipBrollMode={onCancelClipBrollMode}
           />
         )}
         {activePanel === 'intros' && (

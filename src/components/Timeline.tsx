@@ -48,7 +48,11 @@ interface TimelineProps {
   timelapseModeActive: boolean;
   timelapsePendingStart: number | null;
   diagramModeActive: boolean;
+  clipBrollModeActive: boolean;
+  clipBrollPendingGlobalTime: number | null;
+  clipBrollSelection: { start: number; end: number } | null;
   onTimelapseClick: (time: number) => void;
+  onClipBrollClick: (time: number) => void;
   /** Phase 1: hide B-roll editing controls */
   phase1?: boolean;
 }
@@ -74,7 +78,11 @@ export function Timeline({
   timelapseModeActive,
   timelapsePendingStart,
   diagramModeActive,
+  clipBrollModeActive,
+  clipBrollPendingGlobalTime,
+  clipBrollSelection,
   onTimelapseClick,
+  onClipBrollClick,
   phase1 = false,
 }: TimelineProps) {
   const [zoom, setZoom] = useState(2);
@@ -233,6 +241,11 @@ export function Timeline({
 
     if (timelapseModeActive) {
       onTimelapseClick(time);
+      return;
+    }
+
+    if (clipBrollModeActive) {
+      onClipBrollClick(time);
       return;
     }
 
@@ -697,7 +710,11 @@ export function Timeline({
             : 'Scroll wheel to zoom · Click to play'
         }
       >
-        <div className="timeline-scroll" ref={scrollRef} onMouseDown={handleScrubStart}>
+        <div
+          className={`timeline-scroll ${clipBrollModeActive ? 'clip-broll-mode' : ''}`}
+          ref={scrollRef}
+          onMouseDown={handleScrubStart}
+        >
           <div className="timeline-inner" style={{ width: timelineWidth + TRACK_LABEL_WIDTH }}>
             <div className="timeline-ruler-row" style={{ height: RULER_HEIGHT }}>
               <div className="track-label-spacer" style={{ width: TRACK_LABEL_WIDTH }} />
@@ -810,6 +827,28 @@ export function Timeline({
                 </div>
               );
             })}
+
+            {clipBrollSelection && (
+              <div
+                className="clip-broll-selection-band"
+                style={{
+                  left: TRACK_LABEL_WIDTH + timeToPx(Math.min(clipBrollSelection.start, clipBrollSelection.end)),
+                  width: Math.max(
+                    timeToPx(Math.abs(clipBrollSelection.end - clipBrollSelection.start)),
+                    4
+                  ),
+                  top: RULER_HEIGHT,
+                  bottom: 0,
+                }}
+              />
+            )}
+
+            {clipBrollPendingGlobalTime !== null && (
+              <div
+                className="clip-broll-pending-marker"
+                style={{ left: TRACK_LABEL_WIDTH + timeToPx(clipBrollPendingGlobalTime) }}
+              />
+            )}
 
             <div
               className="playhead-line-full"
